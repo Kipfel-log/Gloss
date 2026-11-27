@@ -28,7 +28,21 @@ v0.2.0 起支持多家服务商（均为 OpenAI 兼容格式，地址与参数�
 | DeepSeek | `https://api.deepseek.com` | `deepseek-flash` | `"thinking": {"type": "disabled"}` |
 | 千问（阿里云百炼，北京） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen3.8-flash` 等 | `"enable_thinking": false` |
 | 硅基流动 | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V4-Flash` | `"enable_thinking": false` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `baidu/ernie-5.5-flash-preview:free` 等免费模型 | `"reasoning": {"effort": "none"}` |
 | 自定义 | 用户填写（保存时申请该网址权限） | 用户填写 | 无 |
+
+**思考强度（v0.4.0）**：每家单独设置 关闭 / 低 / 中 / 高，默认关闭。映射：
+
+| 服务商 | 低 / 中 / 高 |
+|---|---|
+| DeepSeek | `thinking: enabled` + `reasoning_effort` = low / high / max |
+| 千问、硅基流动 | `enable_thinking: true` + `thinking_budget` = 512 / 2048 / 8192 |
+| OpenRouter | `reasoning: {effort: low/medium/high, exclude: true}` |
+| 自定义 | `reasoning_effort` = low / medium / high |
+
+开启思考时 max_tokens 额外放宽（+1500 / +4000 / +10000），避免思考用完额度后没有输出。
+
+**不支持 OpenCode 免费模型**：OpenCode 官方文档说明免费模型只能在 OpenCode 客户端里使用。
 
 每家都可以选"自定义模型名"。以下为 v0.1.0 时的 DeepSeek 说明：
 

@@ -1,22 +1,31 @@
 {
   "manifest_version": 3,
   "name": "Gloss",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "结合上下文的划词翻译与段落翻译，调用你自己的大模型 API。",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://api.deepseek.com/*",
     "https://dashscope.aliyuncs.com/*",
-    "https://api.siliconflow.cn/*"
+    "https://api.siliconflow.cn/*",
+    "https://openrouter.ai/*"
   ],
-  "optional_host_permissions": ["https://*/*"],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "src/background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

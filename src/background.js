@@ -123,6 +123,7 @@ async function lookup(req, port, signal) {
   }
 
   const t0 = Date.now();
+  if (a.think !== 'off') safePost(port, { type: 'thinking' });
   let resp;
   try {
     resp = await fetch(a.baseUrl + '/chat/completions', {
@@ -134,7 +135,7 @@ async function lookup(req, port, signal) {
         messages: buildMessages(req),
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: MAX_TOKENS[req.mode] || 1200,
+        max_tokens: (MAX_TOKENS[req.mode] || 1200) + (a.think !== 'off' ? THINK_EXTRA_TOKENS[a.think] || 0 : 0),
         temperature: 0.3,
         ...a.extra,
       }),
@@ -191,6 +192,7 @@ async function lookup(req, port, signal) {
       i: usage?.prompt_tokens || 0,
       o: usage?.completion_tokens || 0,
       c: usage?.prompt_tokens_details?.cached_tokens ?? usage?.prompt_cache_hit_tokens ?? 0,
+      r: usage?.completion_tokens_details?.reasoning_tokens || 0,
       ms: Date.now() - t0,
       f: firstMs,
       nu: usage ? 0 : 1, // 1 = 服务商没有返回用量（多半是中途取消）
@@ -235,11 +237,11 @@ async function testConnection(providerId) {
       body: JSON.stringify({
         model: a.model,
         messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 1,
+        max_tokens: a.think !== 'off' ? 64 : 1,
         ...a.extra,
       }),
     });
-    if (resp.ok) return { ok: true, message: `连接成功 · ${a.model} · ${Date.now() - t0} ms` };
+    if (resp.ok) return { ok: true, message: `连接成功 · ${a.model} · ${Date.now() - t0} ms${a.think !== 'off' ? ' · 思考已开启' : ''}` };
     return { ok: false, message: errorMessage(resp.status, await resp.text().catch(() => ''), a.name) };
   } catch (e) {
     return { ok: false, message: netError(e) };

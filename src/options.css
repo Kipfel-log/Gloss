@@ -117,3 +117,5 @@ td .m { color: var(--muted); font-size: 12px; }
 .pv-foot .danger { margin-left: auto; }
 .pv-foot a + .danger { margin-left: 4px; }
 .providers:empty { display: none; }
+.pv .hint { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+.pv .seg { align-self: flex-start; }

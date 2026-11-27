@@ -362,7 +362,10 @@
 
   function onMessage(m) {
     if (!current || !popEl) return;
-    if (m.type === 'delta') {
+    if (m.type === 'thinking') {
+      setStatus('思考中…');
+    } else if (m.type === 'delta') {
+      if (!current.buffer) setStatus('');
       current.buffer += m.text;
       render(false);
     } else if (m.type === 'done') {
@@ -468,6 +471,7 @@
 .quote { border-left: 3px solid var(--accent); padding-left: .8em; }
 .highlight { background: var(--tint); border-radius: 6px; padding: .45em .7em; }
 .t:empty::before { content: "翻译中…"; opacity: .45; }
+.t[data-thinking]:empty::before { content: "思考中…"; }
 .err { color: #B4453A; font-size: .9em; }
 `;
 
@@ -564,7 +568,8 @@
     }
     node._port = p;
     p.onMessage.addListener((m) => {
-      if (m.type === 'delta') t.textContent += m.text;
+      if (m.type === 'thinking') t.dataset.thinking = '1';
+      else if (m.type === 'delta') t.textContent += m.text;
       else if (m.type === 'done') { t.textContent = t.textContent.trim(); try { p.disconnect(); } catch {} }
       else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; }
     });

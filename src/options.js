@@ -185,6 +185,20 @@ function providerCard(id) {
   }
   card.appendChild(mf);
 
+  // 思考强度
+  const tf = el('div', 'fl');
+  tf.appendChild(el('span', null, '思考强度'));
+  const seg = el('div', 'seg');
+  for (const t of THINK_LEVELS) {
+    const b = el('button', null, t.l);
+    b.type = 'button';
+    b.dataset.v = t.v;
+    seg.appendChild(b);
+  }
+  makeSeg(seg, S.thinking[id] || 'off', (v) => save({ thinking: { ...S.thinking, [id]: v } }));
+  tf.append(seg, el('p', 'hint', '关闭最快、最省；开启后对难句更准，但会更慢，思考过程也按输出 token 计费。'));
+  card.appendChild(tf);
+
   // 底部：测试 + 获取 Key
   const foot = el('div', 'pv-foot');
   const test = el('button', 'btn', '测试连接');
@@ -385,6 +399,7 @@ function renderRecent() {
       el('td', null, KIND[r.k] || r.k),
       el('td', 'r', r.nu ? '—' : r.i.toLocaleString()),
       el('td', 'r', r.nu ? '—' : r.o.toLocaleString()),
+      el('td', 'r', r.r ? r.r.toLocaleString() : '—'),
       el('td', 'r', r.f ? (r.f / 1000).toFixed(2) + ' s' : '—'),
       el('td', 'r', (r.ms / 1000).toFixed(2) + ' s'),
     );
