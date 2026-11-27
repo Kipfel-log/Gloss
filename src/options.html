@@ -15,6 +15,7 @@
       <a href="#models" data-sec="models">模型服务</a>
       <a href="#lookup" data-sec="lookup">划词</a>
       <a href="#para" data-sec="para">段落翻译</a>
+      <a href="#backup" data-sec="backup">备份</a>
       <a href="#about" data-sec="about">关于</a>
       <div class="nav-foot" id="ver"></div>
     </nav>
@@ -108,6 +109,30 @@
         <div class="styles" id="styles"></div>
       </section>
 
+
+      <!-- 备份 -->
+      <section id="backup">
+        <h2>备份</h2>
+        <p class="lede">把设置导出成一个文件，换文件夹、换电脑或者重装插件之后再导入，就不用重新设置一遍。</p>
+        <div class="list">
+          <div class="item">
+            <div class="t">包含 API Key<small>导出的文件里 Key 是明文，别发给别人，也别上传到 GitHub</small></div>
+            <label class="sw"><input type="checkbox" id="expKeys" checked><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">包含用量记录<small>每日汇总和最近的调用明细</small></div>
+            <label class="sw"><input type="checkbox" id="expUsage"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">导出 / 导入<small id="backupHint">导入会覆盖当前的设置；文件里没有 Key 的话，会保留现在已经填好的 Key</small></div>
+            <div class="usage-actions">
+              <button class="btn primary" id="exportBtn">导出设置</button>
+              <button class="btn" id="importBtn">导入设置…</button>
+              <input type="file" id="importFile" accept=".json,application/json" hidden>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- 关于 -->
       <section id="about">

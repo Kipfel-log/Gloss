@@ -738,6 +738,71 @@ function renderRecent() {
   }
 }
 
+// ---------- 备份：导出 / 导入 ----------
+
+const USAGE_KEYS = ['usageDaily', 'usageLog'];
+
+function setupBackup() {
+  $('exportBtn').addEventListener('click', async () => {
+    const all = await chrome.storage.local.get(null);
+    const data = { ...all };
+    if (!$('expKeys').checked) delete data.keys;
+    if (!$('expUsage').checked) for (const k of USAGE_KEYS) delete data[k];
+    delete data.apiKey; // 0.1.0 遗留字段
+    const file = {
+      app: 'Gloss',
+      version: GLOSS_VERSION,
+      exportedAt: new Date().toISOString(),
+      hasKeys: !!data.keys,
+      data,
+    };
+    const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `gloss-设置-${stamp}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('已导出');
+  });
+
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async () => {
+    const f = $('importFile').files[0];
+    $('importFile').value = '';
+    if (!f) return;
+    let file;
+    try {
+      file = JSON.parse(await f.text());
+    } catch {
+      toast('读不了这个文件：不是有效的 JSON');
+      return;
+    }
+    if (!file || file.app !== 'Gloss' || typeof file.data !== 'object') {
+      toast('这不是 Gloss 导出的设置文件');
+      return;
+    }
+    const tip = file.hasKeys ? '文件里包含 API Key，会替换现在的 Key。' : '文件里没有 API Key，会保留现在的 Key。';
+    if (!confirm(`导入 ${file.exportedAt ? file.exportedAt.slice(0, 10) + ' ' : ''}导出的设置？当前设置会被覆盖。\n${tip}`)) return;
+
+    const data = { ...file.data };
+    const cur = await chrome.storage.local.get(['keys', ...USAGE_KEYS]);
+    // 没带 Key 的文件：保留现有 Key；带了 Key 的：空的那几家也保留现有的
+    const keys = { ...(cur.keys || {}) };
+    for (const [k, v] of Object.entries(data.keys || {})) if (v) keys[k] = v;
+    data.keys = keys;
+    // 文件里没有用量记录就不动现有的
+    for (const k of USAGE_KEYS) if (!(k in data) && cur[k]) data[k] = cur[k];
+
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set(data);
+    const needGrant = data.provider === 'custom' || (data.added || []).includes('custom');
+    toast(needGrant ? '已导入。自定义接口需要在卡片里重新点一次“授权并保存”' : '已导入');
+    setTimeout(() => location.reload(), needGrant ? 2200 : 900);
+  });
+}
+
 // ---------- 导航高亮 ----------
 
 function setupNav() {
@@ -774,6 +839,7 @@ async function init() {
     await chrome.storage.session.remove(keys);
     toast(`已清空 ${Math.max(0, keys.length - 1)} 条翻译缓存`);
   });
+  setupBackup();
   $('clearUsage').addEventListener('click', async () => {
     if (!confirm('确定清空所有用量记录吗？这一步不能撤销。')) return;
     await chrome.storage.local.remove(['usageDaily', 'usageLog']);
