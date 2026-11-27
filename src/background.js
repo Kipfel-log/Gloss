@@ -293,10 +293,15 @@ async function callModel(a, req, port, signal, s, level) {
           reasoning += rt;
           safePost(port, { type: 'reason', text: rt });
         }
-        const summary = json.reasoning_summary && json.reasoning_summary.content;
-        if (summary && !reasoning) {
-          reasoning = summary;
-          safePost(port, { type: 'reason', text: summary });
+        // Inception：思考摘要在最后一块的顶层 reasoning_summary 里（官方 OpenAPI 定义）
+        const rs = json.reasoning_summary;
+        if (rs && !reasoning) {
+          const text = rs.content || (rs.status && rs.status !== 'complete'
+            ? `（服务商这次没有返回思考摘要，状态：${rs.status}）` : '');
+          if (text) {
+            reasoning = text;
+            safePost(port, { type: 'reason', text });
+          }
         }
         const text = delta.content;
         if (text) {

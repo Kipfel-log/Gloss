@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.11.1';
+const GLOSS_VERSION = '1.11.2';
 
 const PROVIDERS = {
   deepseek: {
@@ -235,7 +235,10 @@ function glossThinkParams(id, level) {
       return on ? { enable_thinking: true, thinking_budget: THINK_BUDGET[level] } : { enable_thinking: false };
     case 'inception':
       // 默认是 medium，关闭要显式传 instant；思考时顺便要一份思考摘要（它不返回完整思维链）
-      return on ? { reasoning_effort: level, reasoning_summary: true } : { reasoning_effort: 'instant' };
+      // reasoning_summary_wait：不等的话，流结束时摘要常常还没生成好，拿到的是空的
+      return on
+        ? { reasoning_effort: level, reasoning_summary: true, reasoning_summary_wait: true }
+        : { reasoning_effort: 'instant' };
     case 'openrouter':
       // 不设 exclude，让思考过程传回来，小窗里可以展示
       return { reasoning: on ? { effort: level } : { effort: 'none' } };
