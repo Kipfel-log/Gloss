@@ -178,8 +178,10 @@ async function lookup(req, port, signal) {
   // 先用主服务商；限流（429）且开了后备时，换后备服务商重试一次
   let a = prim;
   let fallbackFrom = null;
+  // 思考档位按主服务商的方案算好；切到后备时沿用同一档，体验保持一致
+  const level = glossPickLevel(prim.profile, req.mode, req);
   while (true) {
-    const r = await callModel(a, req, port, signal, s);
+    const r = await callModel(a, req, port, signal, s, level);
     if (r.ok) {
       if (r.full) {
         const val = r.reasoning || fallbackFrom ? { t: r.full, r: r.reasoning } : r.full;
@@ -210,9 +212,8 @@ async function lookup(req, port, signal) {
 }
 
 // 调用一次模型：成功时边收边转发，返回 { ok: true, full, reasoning, level }；失败返回 { ok: false, status, body }
-async function callModel(a, req, port, signal, s) {
+async function callModel(a, req, port, signal, s, level) {
   const t0 = Date.now();
-  const level = glossPickLevel(a.profile, req.mode, req);
   const thinkParams = glossThinkParams(a.id, level);
   if (level !== 'off') safePost(port, { type: 'thinking' });
   let resp;

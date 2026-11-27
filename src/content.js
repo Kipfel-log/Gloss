@@ -444,8 +444,20 @@ ${THINK_TPL}
       const name = m.alias || [m.provider, (m.model || '').split('/').pop()].filter(Boolean).join(' · ');
       const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
       const label = m.cached ? `来自缓存 · ${m.alias || (m.model || '').split('/').pop()}` : [name, lv].filter(Boolean).join(' · ');
-      setStatus(m.fallbackFrom ? `${m.fallbackFrom} 限流 → ${label}` : label);
-      q('.g-status').classList.toggle('warn', !!m.fallbackFrom);
+      if (m.fallbackFrom) {
+        // 限流提示显示 3 秒，然后换回正常的“模型 · 档位”
+        setStatus(`${m.fallbackFrom} 限流 → 已改用 ${m.alias || m.provider}`);
+        q('.g-status').classList.add('warn');
+        const mine = current;
+        setTimeout(() => {
+          if (current !== mine || !popEl) return;
+          setStatus(label);
+          q('.g-status').classList.remove('warn');
+        }, 3000);
+      } else {
+        setStatus(label);
+        q('.g-status').classList.remove('warn');
+      }
       q('.g-status').title = [m.provider, m.model].filter(Boolean).join(' · ');
       const st = q('.g-status');
       if (current.reason) {
@@ -699,7 +711,12 @@ ${THINK_TPL}
         const label = m.cached
           ? `来自缓存 · ${m.alias || short}`
           : (m.alias ? [m.alias, lv] : [m.provider, short, lv]).filter(Boolean).join(' · ');
-        meta.textContent = m.fallbackFrom ? `${m.fallbackFrom} 限流 → ${label}` : label;
+        if (m.fallbackFrom) {
+          meta.textContent = `${m.fallbackFrom} 限流 → 已改用 ${m.alias || m.provider}`;
+          setTimeout(() => { meta.textContent = label; wrap.classList.remove('fb'); }, 3000);
+        } else {
+          meta.textContent = label;
+        }
         try { p.disconnect(); } catch {}
       }
       else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; think.hidden = true; }
