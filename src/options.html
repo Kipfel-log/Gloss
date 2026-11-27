@@ -11,64 +11,15 @@
   <div class="layout">
     <nav>
       <div class="brand">Gloss</div>
+      <a href="#usage" data-sec="usage">用量</a>
       <a href="#models" data-sec="models">模型服务</a>
       <a href="#lookup" data-sec="lookup">划词</a>
       <a href="#para" data-sec="para">段落翻译</a>
-      <a href="#usage" data-sec="usage">用量</a>
       <a href="#about" data-sec="about">关于</a>
       <div class="nav-foot" id="ver"></div>
     </nav>
 
     <main>
-      <!-- 模型服务 -->
-      <section id="models">
-        <h2>模型服务</h2>
-        <p class="lede">每家服务商单独保存 Key 和模型，可以随时切换。Key 只保存在这台电脑的浏览器里。</p>
-        <div class="providers" id="providers"></div>
-      </section>
-
-      <!-- 划词 -->
-      <section id="lookup">
-        <h2>划词</h2>
-        <p class="lede">选中网页上的英文，显示它在这句话里的意思。</p>
-        <div class="list">
-          <div class="item">
-            <div class="t">启用 Gloss<small>关闭后划词和段落翻译都会停用</small></div>
-            <label class="sw"><input type="checkbox" id="enabled"><span class="track"></span></label>
-          </div>
-          <div class="item">
-            <div class="t">触发方式</div>
-            <div class="seg" id="triggerMode"><button data-v="icon">先显示 G 图标</button><button data-v="direct">选中直接翻译</button></div>
-          </div>
-          <div class="item">
-            <div class="t">显示整句翻译<small>关闭后小窗里只显示“显示整句翻译”按钮，先自己理解，需要时再点开</small></div>
-            <label class="sw"><input type="checkbox" id="showSentence"><span class="track"></span></label>
-          </div>
-          <div class="item">
-            <div class="t">查词时自动打开剑桥词典<small>在后台新标签页打开；关闭时可按 <kbd>Alt</kbd> + <kbd>C</kbd> 或点小窗按钮</small></div>
-            <label class="sw"><input type="checkbox" id="autoCambridge"><span class="track"></span></label>
-          </div>
-        </div>
-      </section>
-
-      <!-- 段落翻译 -->
-      <section id="para">
-        <h2>段落翻译</h2>
-        <p class="lede">鼠标停在段落上，单独按一下 <kbd>Shift</kbd>，译文会出现在段落下方；对着原文或译文再按一次就收起。</p>
-        <div class="list">
-          <div class="item">
-            <div class="t">按 Shift 翻译段落</div>
-            <label class="sw"><input type="checkbox" id="paraEnabled"><span class="track"></span></label>
-          </div>
-          <div class="item">
-            <div class="t">译文字号</div>
-            <div class="seg" id="paraSize"><button data-v="same">与原文相同</button><button data-v="small">略小</button></div>
-          </div>
-        </div>
-        <h3>译文样式</h3>
-        <div class="styles" id="styles"></div>
-      </section>
-
       <!-- 用量 -->
       <section id="usage">
         <div class="sec-head">
@@ -95,6 +46,56 @@
         </div>
         <button class="btn danger" id="clearUsage">清空用量记录</button>
       </section>
+      <!-- 模型服务 -->
+      <section id="models">
+        <h2>模型服务</h2>
+        <p class="lede">添加你要用的服务商，每家单独保存 Key 和模型，可以随时切换。Key 只保存在这台电脑的浏览器里。</p>
+        <div class="providers" id="providers"></div>
+        <div class="add-row" id="addRow"></div>
+      </section>
+
+      <!-- 划词 -->
+      <section id="lookup">
+        <h2>划词</h2>
+        <p class="lede">选中网页上的英文，显示它在这句话里的意思。</p>
+        <div class="list">
+          <div class="item">
+            <div class="t">启用 Gloss<small>关闭后划词和段落翻译都会停用</small></div>
+            <label class="sw"><input type="checkbox" id="enabled"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">触发方式</div>
+            <div class="seg" id="triggerMode"><button data-v="icon">先显示 G 图标</button><button data-v="direct">选中直接翻译</button></div>
+          </div>
+          <div class="item">
+            <div class="t">显示整句翻译<small>关闭后点“显示整句翻译”才会去翻译，不点就不消耗额度。同一句里查多个词时，整句只翻译一次</small></div>
+            <label class="sw"><input type="checkbox" id="showSentence"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">查词时自动打开剑桥词典<small>在后台新标签页打开；关闭时可按 <kbd>Alt</kbd> + <kbd>C</kbd> 或点小窗按钮</small></div>
+            <label class="sw"><input type="checkbox" id="autoCambridge"><span class="track"></span></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 段落翻译 -->
+      <section id="para">
+        <h2>段落翻译</h2>
+        <p class="lede">鼠标停在段落上，单独按一下 <kbd>Shift</kbd>，译文会出现在段落下方；对着原文或译文再按一次就收起。</p>
+        <div class="list">
+          <div class="item">
+            <div class="t">按 Shift 翻译段落</div>
+            <label class="sw"><input type="checkbox" id="paraEnabled"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">译文字号<small>固定大小，不会跟着标题一起变大</small></div>
+            <div class="seg" id="paraFont"><button data-v="14">14</button><button data-v="15">15</button><button data-v="16">16</button><button data-v="17">17</button><button data-v="18">18</button></div>
+          </div>
+        </div>
+        <h3>译文样式</h3>
+        <div class="styles" id="styles"></div>
+      </section>
+
 
       <!-- 关于 -->
       <section id="about">

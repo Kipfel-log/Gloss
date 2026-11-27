@@ -11,8 +11,7 @@ const WORD_SYSTEM = `你是英语阅读助手，帮助中国学生读懂网页�
 LEMMA: 选中内容的词典原形（例：作形容词的 dedicated 仍是 dedicated；作动词过去式的 dedicated 是 dedicate；短语给出词典条目形式）
 POS: 它在这句话里的词性，用 n. / v. / adj. / adv. / prep. / conj. / pron. / phr. 等缩写，必要时在括号里加简短说明
 MEANING: 它在这句话里的中文意思，简洁，不超过一句话
-COLLOCATION: 句中与它相关的固定搭配及中文意思，例如 be dedicated to doing 致力于做某事；没有就写 无
-SENTENCE: 所在整句的通顺中文翻译`;
+COLLOCATION: 句中与它相关的固定搭配及中文意思，例如 be dedicated to doing 致力于做某事；没有就写 无`;
 
 const SENTENCE_SYSTEM = `你是英语翻译助手。把用户选中的英文译成通顺、准确的中文。
 结合给出的上下文处理指代、术语和语气。只输出译文，不要解释，不要使用 Markdown。`;
@@ -37,7 +36,7 @@ function buildMessages(req) {
   return [{ role: 'system', content: SENTENCE_SYSTEM }, { role: 'user', content: ctx.join('\n') }];
 }
 
-const MAX_TOKENS = { word: 400, sentence: 1200, paragraph: 1600 };
+const MAX_TOKENS = { word: 300, sentence: 1200, paragraph: 1600 };
 
 // ---------- 工具函数 ----------
 
@@ -101,6 +100,10 @@ function recordUsage(kind, entry) {
 async function lookup(req, port, signal) {
   const s = await glossLoad();
   const a = glossActive(s);
+  if (!a) {
+    safePost(port, { type: 'error', code: 'no-key', message: '还没有添加模型服务。' });
+    return;
+  }
   if (!a.key) {
     safePost(port, { type: 'error', code: 'no-key', message: `还没有填写 ${a.name} 的 API Key。` });
     return;
@@ -221,6 +224,7 @@ async function testConnection(providerId) {
   const s = await glossLoad();
   if (providerId) s.provider = providerId;
   const a = glossActive(s);
+  if (!a) return { ok: false, message: '还没有添加模型服务。' };
   if (!a.key) return { ok: false, message: '还没有填写 API Key。' };
   if (!a.baseUrl || !a.model) return { ok: false, message: '接口地址或模型名还没填好。' };
   const t0 = Date.now();
@@ -268,7 +272,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (raw.apiKey) {
     const keys = { ...GLOSS_DEFAULTS.keys, ...(raw.keys || {}) };
     if (!keys.deepseek) keys.deepseek = raw.apiKey;
-    await chrome.storage.local.set({ keys });
+    await chrome.storage.local.set({ keys, added: ['deepseek'], provider: 'deepseek' });
     await chrome.storage.local.remove(['apiKey', 'model', 'baseUrl']);
   }
 });

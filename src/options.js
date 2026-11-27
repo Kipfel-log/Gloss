@@ -25,10 +25,56 @@ function debounce(fn, ms) {
 
 // ---------- 模型服务 ----------
 
+let addHolder = null;
+document.addEventListener('mousedown', (e) => {
+  if (addHolder && !addHolder.contains(e.target)) addHolder.querySelector('.dd-list').hidden = true;
+});
+
 function renderProviders() {
   const box = $('providers');
   box.textContent = '';
-  for (const id of PROVIDER_ORDER) box.appendChild(providerCard(id));
+  for (const id of S.added) box.appendChild(providerCard(id));
+
+  const row = $('addRow');
+  row.textContent = '';
+  addHolder = null;
+  if (!S.added.length) row.appendChild(el('p', 'empty-note', '还没有添加模型服务，先添加一个才能开始翻译。'));
+  const rest = PROVIDER_ORDER.filter((id) => !S.added.includes(id));
+  if (!rest.length) return;
+
+  const holder = el('div', 'add-menu');
+  const btn = el('button', 'btn' + (S.added.length ? '' : ' primary'), '＋ 添加服务商');
+  btn.type = 'button';
+  const menu = el('div', 'dd-list');
+  menu.hidden = true;
+  for (const id of rest) {
+    const it = el('button', 'dd-item');
+    it.type = 'button';
+    const lab = el('span', 'dd-label');
+    lab.append(el('span', 'dd-main', PROVIDERS[id].name), el('span', 'dd-sub', PROVIDERS[id].hint));
+    it.appendChild(lab);
+    it.addEventListener('click', async () => {
+      const patch = { added: [...S.added, id] };
+      if (!S.provider || !S.added.includes(S.provider)) patch.provider = id;
+      await save(patch, true);
+      renderProviders();
+    });
+    menu.appendChild(it);
+  }
+  btn.addEventListener('click', () => { menu.hidden = !menu.hidden; });
+  holder.append(btn, menu);
+  row.appendChild(holder);
+  addHolder = holder;
+}
+
+async function removeProvider(id) {
+  if (!confirm(`移除 ${PROVIDERS[id].name}？这家的 API Key 也会一起删除。`)) return;
+  const added = S.added.filter((x) => x !== id);
+  const patch = { added, keys: { ...S.keys, [id]: '' } };
+  if (S.provider === id) patch.provider = added[0] || '';
+  await save(patch, true);
+  renderProviders();
+  toast('已移除');
 }
 
 function providerCard(id) {
@@ -158,6 +204,10 @@ function providerCard(id) {
     a.rel = 'noopener';
     foot.appendChild(a);
   }
+  const rm = el('button', 'btn quiet danger', '移除');
+  rm.type = 'button';
+  rm.addEventListener('click', () => removeProvider(id));
+  foot.appendChild(rm);
   card.appendChild(foot);
   return card;
 }
@@ -170,7 +220,7 @@ function renderBehavior() {
   makeSwitch($('showSentence'), S.showSentence, (v) => save({ showSentence: v }));
   makeSwitch($('autoCambridge'), S.autoCambridge, (v) => save({ autoCambridge: v }));
   makeSwitch($('paraEnabled'), S.paraEnabled, (v) => save({ paraEnabled: v }));
-  makeSeg($('paraSize'), S.paraSize, (v) => { save({ paraSize: v }); renderStyles(); });
+  makeSeg($('paraFont'), String(S.paraFont), (v) => { save({ paraFont: Number(v) }); renderStyles(); });
   renderStyles();
 }
 
@@ -182,8 +232,8 @@ function renderStyles() {
     b.type = 'button';
     const name = el('div', 'st-name');
     name.append(el('span', null, st.name), el('small', null, st.desc));
-    const tr = el('div', 'st-trans ' + st.id + (S.paraSize === 'small' ? ' small' : ''),
-      'AI 将对世界产生深远影响。');
+    const tr = el('div', 'st-trans ' + st.id, 'AI 将对世界产生深远影响。');
+    tr.style.fontSize = S.paraFont + 'px';
     b.append(name, el('div', 'st-sample', 'AI will have a vast impact on the world.'), tr);
     b.addEventListener('click', () => { save({ paraStyle: st.id }); renderStyles(); });
     box.appendChild(b);
@@ -346,12 +396,16 @@ function renderRecent() {
 
 function setupNav() {
   const links = [...document.querySelectorAll('nav a[data-sec]')];
-  const io = new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (e.isIntersecting) links.forEach((a) => a.classList.toggle('on', a.dataset.sec === e.target.id));
-    }
-  }, { rootMargin: '-30% 0px -60% 0px' });
-  document.querySelectorAll('main section').forEach((s) => io.observe(s));
+  const secs = [...document.querySelectorAll('main section')];
+  const update = () => {
+    // 取最后一个顶部已经滚过视口上方 1/4 的章节；到底部时选最后一个
+    let cur = secs[0].id;
+    for (const s of secs) if (s.getBoundingClientRect().top <= innerHeight * 0.25) cur = s.id;
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) cur = secs[secs.length - 1].id;
+    links.forEach((a) => a.classList.toggle('on', a.dataset.sec === cur));
+  };
+  addEventListener('scroll', update, { passive: true });
+  update();
 }
 
 // ---------- 启动 ----------
@@ -375,7 +429,7 @@ async function init() {
   chrome.storage.onChanged.addListener((ch, area) => {
     if (area !== 'local') return;
     if (ch.usageDaily || ch.usageLog) loadUsage();
-    if (ch.provider) { S.provider = ch.provider.newValue; renderProviders(); }
+    if (ch.provider && ch.provider.newValue !== S.provider) { S.provider = ch.provider.newValue; renderProviders(); }
   });
 }
 

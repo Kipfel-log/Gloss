@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '0.2.0';
+const GLOSS_VERSION = '0.3.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -48,8 +48,11 @@ const PARA_STYLES = [
   { id: 'highlight', name: '浅色底纹', desc: '整块淡橙色背景' },
 ];
 
+const PARA_FONTS = [14, 15, 16, 17, 18];
+
 const GLOSS_DEFAULTS = {
-  provider: 'deepseek',
+  provider: '',
+  added: [], // 用户添加过的服务商；没添加的不显示
   keys: { deepseek: '', qwen: '', siliconflow: '', custom: '' },
   models: {
     deepseek: 'deepseek-flash',
@@ -64,7 +67,7 @@ const GLOSS_DEFAULTS = {
   autoCambridge: false,
   paraEnabled: true,
   paraStyle: 'muted',
-  paraSize: 'same',
+  paraFont: 16,
 };
 
 async function glossLoad() {
@@ -74,7 +77,11 @@ async function glossLoad() {
   s.models = { ...GLOSS_DEFAULTS.models, ...(raw.models || {}) };
   // 0.1.0 的旧设置迁移
   if (raw.apiKey && !s.keys.deepseek) s.keys.deepseek = raw.apiKey;
-  if (!PROVIDERS[s.provider]) s.provider = 'deepseek';
+  // 0.2.0 → 0.3.0：没有 added 列表时，把已经填过 Key 的服务商视为已添加
+  if (!Array.isArray(raw.added)) s.added = PROVIDER_ORDER.filter((id) => s.keys[id]);
+  s.added = s.added.filter((id) => PROVIDERS[id]);
+  if (!s.added.includes(s.provider)) s.provider = s.added[0] || '';
+  if (!PARA_FONTS.includes(Number(s.paraFont))) s.paraFont = 16;
   return s;
 }
 
@@ -83,7 +90,8 @@ async function glossSave(patch) {
 }
 
 function glossActive(s) {
-  const p = PROVIDERS[s.provider] || PROVIDERS.deepseek;
+  if (!s.provider || !PROVIDERS[s.provider]) return null;
+  const p = PROVIDERS[s.provider];
   return {
     id: s.provider,
     name: p.name,

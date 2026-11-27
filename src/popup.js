@@ -9,7 +9,11 @@ async function init() {
   const s = await glossLoad();
   $('ver').textContent = 'v' + GLOSS_VERSION;
 
-  const showKeyWarn = () => { $('noKey').hidden = !!s.keys[s.provider]; };
+  const showKeyWarn = () => {
+    $('noKey').hidden = !!(s.provider && s.keys[s.provider]);
+    $('noKeyText').textContent = s.added.length ? '还没有填写 API Key' : '还没有添加模型服务';
+  };
+  $('provider').hidden = !s.added.length;
   const dd = makeDropdown($('provider'), {
     options: providerOptions(s),
     value: s.provider,

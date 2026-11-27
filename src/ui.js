@@ -115,7 +115,7 @@ function makeSeg(container, value, onChange) {
 }
 
 function providerOptions(s) {
-  return PROVIDER_ORDER.map((id) => ({
+  return s.added.map((id) => ({
     value: id,
     label: PROVIDERS[id].name,
     sub: (s.models[id] || '未设置模型') + (s.keys[id] ? '' : ' · 未填 Key'),

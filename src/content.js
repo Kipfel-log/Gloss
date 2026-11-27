@@ -9,7 +9,7 @@
   // 只读取界面相关的开关；API Key 只在后台读取
   const UI_DEFAULTS = {
     enabled: true, triggerMode: 'icon', showSentence: true, autoCambridge: false,
-    paraEnabled: true, paraStyle: 'muted', paraSize: 'same',
+    paraEnabled: true, paraStyle: 'muted', paraFont: 16,
   };
   const settings = { ...UI_DEFAULTS };
   chrome.storage.local.get(UI_DEFAULTS)
@@ -21,7 +21,7 @@
     for (const k of Object.keys(UI_DEFAULTS)) {
       if (changes[k]) {
         settings[k] = changes[k].newValue;
-        if (k === 'paraStyle' || k === 'paraSize') paraChanged = true;
+        if (k === 'paraStyle' || k === 'paraFont') paraChanged = true;
       }
     }
     if (paraChanged) paraNodes.forEach(applyParaClass); // 已插入的译文实时换样式
@@ -277,12 +277,18 @@
     if (p.mode === 'word') {
       q('.g-head').textContent = p.selection;
       q('.g-cam').addEventListener('click', () => openCambridge(true));
-      if (!settings.showSentence) {
-        // 先自己理解，需要时再点开（译文照常在后台生成，点开立刻就有）
+      if (settings.showSentence) {
+        startSentence();
+      } else {
+        // 先自己理解，需要时再点开才请求（同一句只翻一次，之后走缓存）
         const btn = q('.g-reveal');
         btn.hidden = false;
         q('.g-sentence').classList.add('veiled');
-        btn.addEventListener('click', () => { q('.g-sentence').classList.remove('veiled'); btn.hidden = true; });
+        btn.addEventListener('click', () => {
+          q('.g-sentence').classList.remove('veiled');
+          btn.hidden = true;
+          startSentence();
+        });
       }
     }
     position(p.rect);
@@ -307,6 +313,27 @@
     if (popEl) { popEl.remove(); popEl = null; }
     current = null;
     if (port) { try { port.disconnect(); } catch {} port = null; }
+    if (sentPort) { try { sentPort.disconnect(); } catch {} sentPort = null; }
+  }
+
+  // 整句翻译单独请求：查同一句里的多个词时，整句只翻译一次（后面走缓存）
+  let sentPort = null;
+  function startSentence() {
+    if (!current || !current.sentence) { fill('.g-sentence', '', true); return; }
+    let my;
+    try { my = chrome.runtime.connect({ name: 'gloss' }); } catch { return; }
+    sentPort = my;
+    let buf = '';
+    my.onMessage.addListener((m) => {
+      if (sentPort !== my || !popEl) return;
+      if (m.type === 'delta') { buf += m.text; fill('.g-sentence', buf.trim(), false); }
+      else if (m.type === 'done') { fill('.g-sentence', buf.trim(), true); try { my.disconnect(); } catch {} }
+      else if (m.type === 'error') { fill('.g-sentence', m.message || '出错了。', true); }
+    });
+    my.postMessage({
+      mode: 'sentence', selection: current.sentence, sentence: current.sentence,
+      paragraph: current.paragraph, title: current.title,
+    });
   }
 
   function setStatus(text) {
@@ -378,7 +405,6 @@
       current.fields = f;
       fill('.g-pos', f.POS, final);
       fill('.g-meaning', f.MEANING, final);
-      fill('.g-sentence', f.SENTENCE, final);
       const c = (f.COLLOCATION || '').trim();
       const box = q('.g-colloc');
       if (c && !/^(无|none|n\/a|-|—)[。.]?$/i.test(c)) {
@@ -429,8 +455,11 @@
 :host { display: block !important; margin: .4em 0 0 !important; padding: 0 !important; }
 .w { --accent: #C96442; --tint: rgba(201,100,66,.08); }
 @media (prefers-color-scheme: dark) { .w { --accent: #E0866A; --tint: rgba(224,134,106,.12); } }
-.t { white-space: pre-wrap; }
-.small .t { font-size: .9em; }
+.t {
+  white-space: pre-wrap; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: var(--fs, 16px); font-weight: 400; font-style: normal; line-height: 1.7;
+  letter-spacing: normal; text-transform: none;
+}
 .muted .t { opacity: .66; }
 .dashed .t {
   text-decoration: underline dashed; text-decoration-thickness: 1px;
@@ -544,7 +573,8 @@
 
   function applyParaClass(node) {
     if (!node._wrap) return;
-    node._wrap.className = 'w ' + (settings.paraStyle || 'muted') + (settings.paraSize === 'small' ? ' small' : '');
+    node._wrap.className = 'w ' + (settings.paraStyle || 'muted');
+    node._wrap.style.setProperty('--fs', (Number(settings.paraFont) || 16) + 'px'); // 固定字号，不跟着标题变大
   }
 
   function removePara(node) {
