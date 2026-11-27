@@ -6,16 +6,26 @@
 
   const CAMBRIDGE = 'https://dictionary.cambridge.org/dictionary/english-chinese-simplified/';
 
-  // 只读取非敏感设置；API Key 只在后台读取
-  const settings = { triggerMode: 'icon', autoCambridge: false };
-  chrome.storage.local.get({ triggerMode: 'icon', autoCambridge: false })
-    .then((s) => Object.assign(settings, s))
+  // 只读取界面相关的开关；API Key 只在后台读取
+  const UI_DEFAULTS = {
+    enabled: true, triggerMode: 'icon', showSentence: true, autoCambridge: false,
+    paraEnabled: true, paraStyle: 'muted', paraSize: 'same',
+  };
+  const settings = { ...UI_DEFAULTS };
+  chrome.storage.local.get(UI_DEFAULTS)
+    .then((s) => { Object.assign(settings, s); })
     .catch(() => {});
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    for (const k of ['triggerMode', 'autoCambridge']) {
-      if (changes[k]) settings[k] = changes[k].newValue;
+    let paraChanged = false;
+    for (const k of Object.keys(UI_DEFAULTS)) {
+      if (changes[k]) {
+        settings[k] = changes[k].newValue;
+        if (k === 'paraStyle' || k === 'paraSize') paraChanged = true;
+      }
     }
+    if (paraChanged) paraNodes.forEach(applyParaClass); // 已插入的译文实时换样式
+    if (!settings.enabled) { hideIcon(); closePopup(); }
   });
 
   // ---------- 样式 ----------
@@ -82,6 +92,13 @@
 .g-sep { height: 1px; background: var(--line); margin: 10px 0 8px; }
 .g-label { font: 600 11px/1.6 var(--sans); letter-spacing: .06em; color: var(--muted); flex-shrink: 0; }
 .g-sentence { font-size: 13.5px; color: var(--text); }
+.g-sent-row { display: flex; align-items: center; justify-content: space-between; }
+.g-reveal {
+  border: 0; background: transparent; color: var(--accent); cursor: pointer;
+  font: 500 12px/1.6 var(--sans); padding: 0;
+}
+.g-reveal:hover { text-decoration: underline; }
+.g-sentence.veiled { display: none; }
 .g-trans { font-size: 15px; margin-top: 2px; white-space: pre-wrap; }
 
 .g-foot {
@@ -117,7 +134,7 @@
 <div class="g-meaning skel-block"></div>
 <div class="g-colloc" hidden><span class="g-label">搭配</span><span class="g-colloc-text"></span></div>
 <div class="g-sep"></div>
-<div class="g-label">整句</div>
+<div class="g-sent-row"><span class="g-label">整句</span><button class="g-reveal" hidden>显示整句翻译</button></div>
 <div class="g-sentence skel-block"></div>
 <div class="g-foot"><button class="g-cam" title="Alt+C">剑桥词典 ↗</button><span class="g-status"></span></div>`;
 
@@ -184,6 +201,7 @@
   // ---------- 选中检测 ----------
 
   function handleSelection(e) {
+    if (!settings.enabled) return;
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
     const sel = window.getSelection();
@@ -259,6 +277,13 @@
     if (p.mode === 'word') {
       q('.g-head').textContent = p.selection;
       q('.g-cam').addEventListener('click', () => openCambridge(true));
+      if (!settings.showSentence) {
+        // 先自己理解，需要时再点开（译文照常在后台生成，点开立刻就有）
+        const btn = q('.g-reveal');
+        btn.hidden = false;
+        q('.g-sentence').classList.add('veiled');
+        btn.addEventListener('click', () => { q('.g-sentence').classList.remove('veiled'); btn.hidden = true; });
+      }
     }
     position(p.rect);
     startLookup(p);
@@ -394,5 +419,138 @@
     try {
       chrome.runtime.sendMessage({ type: 'open-tab', url: CAMBRIDGE + encodeURIComponent(word), active });
     } catch { /* 插件已重新加载 */ }
+  }
+
+  // =====================================================================
+  // 段落翻译：鼠标停在段落上，单独按一下 Shift → 在段落末尾插入译文；再按一次收起
+  // =====================================================================
+
+  const PARA_CSS = `
+:host { display: block !important; margin: .4em 0 0 !important; padding: 0 !important; }
+.w { --accent: #C96442; --tint: rgba(201,100,66,.08); }
+@media (prefers-color-scheme: dark) { .w { --accent: #E0866A; --tint: rgba(224,134,106,.12); } }
+.t { white-space: pre-wrap; }
+.small .t { font-size: .9em; }
+.muted .t { opacity: .66; }
+.dashed .t {
+  text-decoration: underline dashed; text-decoration-thickness: 1px;
+  text-decoration-color: var(--accent); text-underline-offset: .28em;
+}
+.quote { border-left: 3px solid var(--accent); padding-left: .8em; }
+.highlight { background: var(--tint); border-radius: 6px; padding: .45em .7em; }
+.t:empty::before { content: "翻译中…"; opacity: .45; }
+.err { color: #B4453A; font-size: .9em; }
+`;
+
+  const PARA_BLOCK = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,dd,dt,figcaption,td,th,summary,caption';
+  const paraNodes = new Set();       // 当前页面上所有译文节点
+  const paraOf = new WeakMap();      // 原文段落 → 译文节点
+  let mouseX = -1, mouseY = -1;
+  let shiftAt = 0, shiftClean = false;
+
+  document.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; }, { capture: true, passive: true });
+  document.addEventListener('mousedown', () => { shiftClean = false; }, true);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift') {
+      if (!e.repeat) { shiftAt = Date.now(); shiftClean = true; }
+    } else {
+      shiftClean = false; // Shift+其他键（打大写字母、快捷键）不算
+    }
+  }, true);
+
+  document.addEventListener('keyup', (e) => {
+    if (e.key !== 'Shift' || !shiftClean) return;
+    shiftClean = false;
+    if (Date.now() - shiftAt > 500) return; // 按住太久不算“单按”
+    if (!settings.enabled || !settings.paraEnabled || mouseX < 0) return;
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+    toggleParagraphAt(mouseX, mouseY);
+  }, true);
+
+  function blockOf(el) {
+    const b = el.closest(PARA_BLOCK);
+    if (b) return b;
+    let n = el;
+    while (n && n !== document.body) {
+      const d = getComputedStyle(n).display;
+      if (d !== 'inline' && d !== 'contents') break;
+      n = n.parentElement;
+    }
+    return n;
+  }
+
+  function textOf(el) {
+    return ((el && el.innerText) || '').replace(/\s+/g, ' ').trim(); // 影子 DOM 里的译文不会被算进来
+  }
+
+  function toggleParagraphAt(x, y) {
+    hideIcon();
+    const el = document.elementFromPoint(x, y);
+    if (!el || el === host) return;
+    const hit = el.closest('gloss-para');
+    if (hit) { removePara(hit); return; }
+
+    const block = blockOf(el);
+    if (!block || block === document.body || block === document.documentElement) return;
+
+    const existing = paraOf.get(block);
+    if (existing && existing.isConnected) { removePara(existing); return; }
+
+    const text = textOf(block);
+    if (text.length < 2 || text.length > 4000 || !/[A-Za-z]{2}/.test(text)) return;
+
+    // 上一段作为上下文
+    let prev = '';
+    let sib = block.previousElementSibling;
+    while (sib && !prev) { prev = textOf(sib); sib = sib.previousElementSibling; }
+    prev = prev.slice(-600);
+
+    const node = document.createElement('gloss-para');
+    node.setAttribute('translate', 'no');
+    const shadow = node.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = PARA_CSS;
+    const wrap = document.createElement('div');
+    const t = document.createElement('div');
+    t.className = 't';
+    wrap.appendChild(t);
+    shadow.append(style, wrap);
+    node._wrap = wrap;
+    node._t = t;
+    applyParaClass(node);
+    block.appendChild(node);
+    paraNodes.add(node);
+    paraOf.set(block, node);
+    node._block = block;
+
+    let p;
+    try {
+      p = chrome.runtime.connect({ name: 'gloss' });
+    } catch {
+      t.className = 'err';
+      t.textContent = 'Gloss 刚刚更新过，请刷新这个网页后再试。';
+      return;
+    }
+    node._port = p;
+    p.onMessage.addListener((m) => {
+      if (m.type === 'delta') t.textContent += m.text;
+      else if (m.type === 'done') { t.textContent = t.textContent.trim(); try { p.disconnect(); } catch {} }
+      else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; }
+    });
+    p.postMessage({ mode: 'paragraph', selection: text, prev, title: document.title.slice(0, 200) });
+  }
+
+  function applyParaClass(node) {
+    if (!node._wrap) return;
+    node._wrap.className = 'w ' + (settings.paraStyle || 'muted') + (settings.paraSize === 'small' ? ' small' : '');
+  }
+
+  function removePara(node) {
+    try { node._port && node._port.disconnect(); } catch {}
+    paraNodes.delete(node);
+    if (node._block) paraOf.delete(node._block);
+    node.remove();
   }
 })();

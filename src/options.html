@@ -4,69 +4,115 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gloss 设置</title>
+  <link rel="stylesheet" href="ui.css">
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <main>
-    <header>
-      <h1>Gloss</h1>
-      <p class="lede">结合上下文的划词翻译。选中网页上的英文，点一下旁边的 <span class="g">G</span>，就能看到这个词在这句话里的意思。</p>
-    </header>
+  <div class="layout">
+    <nav>
+      <div class="brand">Gloss</div>
+      <a href="#models" data-sec="models">模型服务</a>
+      <a href="#lookup" data-sec="lookup">划词</a>
+      <a href="#para" data-sec="para">段落翻译</a>
+      <a href="#usage" data-sec="usage">用量</a>
+      <a href="#about" data-sec="about">关于</a>
+      <div class="nav-foot" id="ver"></div>
+    </nav>
 
-    <section>
-      <h2>模型</h2>
+    <main>
+      <!-- 模型服务 -->
+      <section id="models">
+        <h2>模型服务</h2>
+        <p class="lede">每家服务商单独保存 Key 和模型，可以随时切换。Key 只保存在这台电脑的浏览器里。</p>
+        <div class="providers" id="providers"></div>
+      </section>
 
-      <label class="field">
-        <span class="name">API Key</span>
-        <span class="row">
-          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
-          <button type="button" id="toggleKey" class="ghost">显示</button>
-        </span>
-        <span class="hint">在 DeepSeek 开放平台创建。只保存在这台电脑的浏览器里，不会上传到任何地方。</span>
-      </label>
+      <!-- 划词 -->
+      <section id="lookup">
+        <h2>划词</h2>
+        <p class="lede">选中网页上的英文，显示它在这句话里的意思。</p>
+        <div class="list">
+          <div class="item">
+            <div class="t">启用 Gloss<small>关闭后划词和段落翻译都会停用</small></div>
+            <label class="sw"><input type="checkbox" id="enabled"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">触发方式</div>
+            <div class="seg" id="triggerMode"><button data-v="icon">先显示 G 图标</button><button data-v="direct">选中直接翻译</button></div>
+          </div>
+          <div class="item">
+            <div class="t">显示整句翻译<small>关闭后小窗里只显示“显示整句翻译”按钮，先自己理解，需要时再点开</small></div>
+            <label class="sw"><input type="checkbox" id="showSentence"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">查词时自动打开剑桥词典<small>在后台新标签页打开；关闭时可按 <kbd>Alt</kbd> + <kbd>C</kbd> 或点小窗按钮</small></div>
+            <label class="sw"><input type="checkbox" id="autoCambridge"><span class="track"></span></label>
+          </div>
+        </div>
+      </section>
 
-      <label class="field">
-        <span class="name">模型</span>
-        <select id="modelSelect">
-          <option value="deepseek-flash">deepseek-flash（推荐：快、便宜）</option>
-          <option value="deepseek-v4-pro">deepseek-v4-pro（更强、更贵）</option>
-          <option value="custom">自定义…</option>
-        </select>
-        <input id="modelCustom" type="text" spellcheck="false" placeholder="模型名" hidden>
-      </label>
+      <!-- 段落翻译 -->
+      <section id="para">
+        <h2>段落翻译</h2>
+        <p class="lede">鼠标停在段落上，单独按一下 <kbd>Shift</kbd>，译文会出现在段落下方；对着原文或译文再按一次就收起。</p>
+        <div class="list">
+          <div class="item">
+            <div class="t">按 Shift 翻译段落</div>
+            <label class="sw"><input type="checkbox" id="paraEnabled"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">译文字号</div>
+            <div class="seg" id="paraSize"><button data-v="same">与原文相同</button><button data-v="small">略小</button></div>
+          </div>
+        </div>
+        <h3>译文样式</h3>
+        <div class="styles" id="styles"></div>
+      </section>
 
-      <details>
-        <summary>高级</summary>
-        <label class="field">
-          <span class="name">接口地址（OpenAI 兼容格式）</span>
-          <input id="baseUrl" type="url" spellcheck="false" placeholder="https://api.deepseek.com">
-          <span class="hint">一般不用改。换成其他服务商时，保存会请求访问该网址的权限。</span>
-        </label>
-      </details>
-    </section>
+      <!-- 用量 -->
+      <section id="usage">
+        <div class="sec-head">
+          <h2>用量</h2>
+          <div class="seg" id="range"><button data-v="7">7 天</button><button data-v="30">30 天</button><button data-v="90">90 天</button></div>
+        </div>
+        <p class="lede">只统计 Gloss 发出的请求，token 数来自服务商的返回。实际费用以服务商控制台为准。</p>
+        <div class="tiles" id="tiles"></div>
+        <div class="chart-card">
+          <div class="legend">
+            <span><i class="sw-in"></i>输入 tokens</span>
+            <span><i class="sw-out"></i>输出 tokens</span>
+          </div>
+          <div class="chart" id="chart"></div>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+        <h3>最近调用</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>服务商 / 模型</th><th>类型</th><th class="r">输入</th><th class="r">输出</th><th class="r">首字</th><th class="r">总耗时</th></tr></thead>
+            <tbody id="recent"></tbody>
+          </table>
+          <p class="empty" id="recentEmpty">还没有调用记录。</p>
+        </div>
+        <button class="btn danger" id="clearUsage">清空用量记录</button>
+      </section>
 
-    <section>
-      <h2>使用</h2>
+      <!-- 关于 -->
+      <section id="about">
+        <h2>关于</h2>
+        <div class="list">
+          <div class="item"><div class="t">选中文字后关闭小窗</div><kbd>Esc</kbd></div>
+          <div class="item"><div class="t">在剑桥词典打开当前词</div><span><kbd>Alt</kbd> + <kbd>C</kbd></span></div>
+          <div class="item"><div class="t">翻译 / 收起鼠标所在段落</div><kbd>Shift</kbd></div>
+          <div class="item"><div class="t">源代码</div><a href="https://github.com/Kipfel-log/Gloss" target="_blank" rel="noopener">github.com/Kipfel-log/Gloss ↗</a></div>
+        </div>
+      </section>
+    </main>
+  </div>
 
-      <div class="field">
-        <span class="name">触发方式</span>
-        <label class="choice"><input type="radio" name="triggerMode" value="icon"> 选中后显示小图标，点击再翻译</label>
-        <label class="choice"><input type="radio" name="triggerMode" value="direct"> 选中后直接翻译</label>
-      </div>
+  <div class="toast" id="toast" hidden></div>
 
-      <label class="switch">
-        <input id="autoCambridge" type="checkbox">
-        <span>查词时自动在后台打开剑桥词典</span>
-      </label>
-      <p class="hint">关闭时也可以点小窗里的“剑桥词典 ↗”，或按 <kbd>Alt</kbd> + <kbd>C</kbd>。</p>
-    </section>
-
-    <footer>
-      <button id="save" class="primary">保存</button>
-      <button id="test" class="ghost">测试连接</button>
-      <span id="status" role="status"></span>
-    </footer>
-  </main>
+  <script src="shared.js"></script>
+  <script src="ui.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Gloss",
-  "version": "0.1.0",
-  "description": "结合上下文的划词翻译，调用你自己的大模型 API。",
+  "version": "0.2.0",
+  "description": "结合上下文的划词翻译与段落翻译，调用你自己的大模型 API。",
   "permissions": ["storage"],
-  "host_permissions": ["https://api.deepseek.com/*"],
+  "host_permissions": [
+    "https://api.deepseek.com/*",
+    "https://dashscope.aliyuncs.com/*",
+    "https://api.siliconflow.cn/*"
+  ],
   "optional_host_permissions": ["https://*/*"],
   "background": {
     "service_worker": "src/background.js"
@@ -18,6 +22,7 @@
   ],
   "options_page": "src/options.html",
   "action": {
-    "default_title": "Gloss 设置"
+    "default_title": "Gloss",
+    "default_popup": "src/popup.html"
   }
 }

@@ -6,7 +6,9 @@
 |---|---|
 | **content script**（注入网页） | 检测选中文字，抓取上下文；在旁边弹出小窗（用 Shadow DOM 隔离样式，不受网页影响）；段落/全页翻译时在原文下方插入译文 |
 | **background**（service worker） | 调用模型 API，把流式结果通过消息端口传给小窗。放在后台是为了避开网页跨域限制，API Key 也只保存在这里，不暴露给网页 |
-| **设置页**（options page） | API Key、模型名、提示词、快捷键、剑桥自动跳转开关 |
+| **小设置弹窗**（popup） | 点工具栏图标弹出：切换服务商、常用开关、今日用量 |
+| **完整设置页**（options page） | 服务商卡片（Key / 模型 / 测试连接）、划词与段落设置、译文样式预览、用量统计 |
+| **shared.js** | 服务商预设、默认设置，后台和设置页共用（content script 不加载，不接触 Key） |
 
 数据流：
 
@@ -18,6 +20,17 @@
 ```
 
 ## 二、模型
+
+v0.2.0 起支持多家服务商（均为 OpenAI 兼容格式，地址与参数来自各家官方文档）：
+
+| 服务商 | 接口地址 | 预设模型 | 关闭思考 |
+|---|---|---|---|
+| DeepSeek | `https://api.deepseek.com` | `deepseek-flash` | `"thinking": {"type": "disabled"}` |
+| 千问（阿里云百炼，北京） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen3.8-flash` 等 | `"enable_thinking": false` |
+| 硅基流动 | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V4-Flash` | `"enable_thinking": false` |
+| 自定义 | 用户填写（保存时申请该网址权限） | 用户填写 | 无 |
+
+每家都可以选"自定义模型名"。以下为 v0.1.0 时的 DeepSeek 说明：
 
 - 服务商：**DeepSeek**
 - 接口格式：OpenAI 兼容，Base URL `https://api.deepseek.com`
@@ -69,14 +82,21 @@
 - 链接格式（**待实测确认**，开发时未能在官方页面验证）：
   `https://dictionary.cambridge.org/dictionary/english-chinese-simplified/<单词>`
 
-## 五、速度策略
+## 五、用量记录
+
+- 请求时带 `stream_options: {include_usage: true}`，从最后一个数据块读取 `usage`
+- 每次调用记录：时间、服务商、模型、类型、输入/输出 token、缓存命中 token、首字耗时、总耗时
+- 按天汇总（保留 180 天），另计本地缓存命中次数和失败次数；逐条记录保留最近 2000 条
+- 中途关闭小窗也会记账（已生成部分同样计费）；服务商未返回用量时标记为"—"
+
+## 六、速度策略
 
 - 流式输出
 - 使用小模型 `deepseek-flash`，关闭思考模式
 - 结果缓存（按"选中内容 + 句子"做 key）
 - 提示词短、限制最大输出长度
 
-## 六、界面风格
+## 七、界面风格
 
 参考 Anthropic 官网的视觉感觉，**只借鉴风格，不使用其 logo 和字标**。
 
@@ -86,12 +106,12 @@
 - 大量留白、圆角、细边框；不用花哨的渐变和重阴影
 - 支持深色模式
 
-## 七、已定决策
+## 八、已定决策
 
 | 决策 | 结论 |
 |---|---|
 | 平台 | 只做电脑端 Chrome |
-| 模型 | DeepSeek，默认 `deepseek-flash`，关闭思考模式 |
+| 模型 | 默认 DeepSeek `deepseek-flash`；另支持千问、硅基流动、自定义；均关闭思考模式 |
 | 词性 | 交给大模型按语境判断；剑桥跳转作为兜底核对 |
 | 音标 | 不由 AI 生成 |
 | 剑桥跳转 | 按钮 + 快捷键；自动打开默认关闭 |

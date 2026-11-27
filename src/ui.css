@@ -1,0 +1,110 @@
+/* Gloss 设置界面共用样式（小设置弹窗 + 完整设置页） */
+:root {
+  --bg: #FAF9F5; --surface: #FFFFFF; --sunk: #F0EEE6; --text: #141413; --muted: #73726C; --faint: #A3A199;
+  --line: #E6E3D8; --line-strong: #D6D2C4;
+  --accent: #C96442; --accent-soft: rgba(201,100,66,.10); --accent-ink: #FFFFFF;
+  --ok: #4C7A4F; --bad: #B4453A; --warn: #A3721C;
+  --shadow: 0 1px 2px rgba(20,20,19,.04), 0 10px 30px rgba(20,20,19,.10);
+  --serif: "Iowan Old Style", "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #262624; --surface: #30302E; --sunk: #1F1F1D; --text: #F3F2EC; --muted: #A5A399; --faint: #74726B;
+    --line: #3D3C38; --line-strong: #4A4944;
+    --accent: #E0866A; --accent-soft: rgba(224,134,106,.14); --accent-ink: #1F1F1D;
+    --ok: #8DBB8F; --bad: #E8877C; --warn: #D9AE5F;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 36px rgba(0,0,0,.5);
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; padding: 8px 14px;
+  font: 500 13px/1.2 var(--sans); cursor: pointer; border: 1px solid var(--line); background: var(--surface);
+  transition: border-color .12s, color .12s, background .12s;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); color: var(--accent-ink); }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.quiet:hover { color: var(--text); background: var(--sunk); }
+.btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+
+/* ---------- 开关 ---------- */
+.sw { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; cursor: pointer; }
+.sw input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.sw .track {
+  position: absolute; inset: 0; border-radius: 999px; background: var(--line-strong);
+  transition: background .16s ease;
+}
+.sw .track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .16s ease;
+}
+.sw input:checked + .track { background: var(--accent); }
+.sw input:checked + .track::after { transform: translateX(16px); }
+.sw input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- 分段选择 ---------- */
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--sunk); border-radius: 10px; border: 1px solid var(--line); }
+.seg button {
+  border: 0; background: transparent; padding: 5px 12px; border-radius: 7px; cursor: pointer;
+  font: 500 12.5px/1.3 var(--sans); color: var(--muted);
+}
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* ---------- 下拉框 ---------- */
+.dd { position: relative; }
+.dd-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.dd-btn:hover { border-color: var(--line-strong); }
+.dd.open .dd-btn, .dd-btn:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.dd-label { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dd-main { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-chev { color: var(--muted); transition: transform .15s; flex-shrink: 0; }
+.dd.open .dd-chev { transform: rotate(180deg); }
+.dd-list {
+  position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 6px); max-height: 280px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 5px;
+  animation: dd-in .12s ease-out;
+}
+@keyframes dd-in { from { opacity: 0; transform: translateY(-4px); } }
+.dd-item {
+  width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; background: transparent;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+}
+.dd-item:hover, .dd-item.focus { background: var(--sunk); }
+.dd-item .dd-check { width: 16px; color: var(--accent); visibility: hidden; flex-shrink: 0; }
+.dd-item.on .dd-check { visibility: visible; }
+.dd-item.on .dd-main { color: var(--accent); }
+
+/* ---------- 输入框 ---------- */
+.input {
+  width: 100%; font: 13.5px/1.4 var(--sans); color: var(--text); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; outline: none;
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input.mono { font-family: var(--mono); font-size: 12.5px; }
+
+.status { font-size: 12.5px; color: var(--muted); }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--bad); }
+kbd {
+  font: 11.5px/1.5 var(--sans); background: var(--sunk); border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 5px; padding: 0 5px;
+}
+.dd.up .dd-list { top: auto; bottom: calc(100% + 6px); }
+.dd.right .dd-list { left: auto; min-width: 170px; }

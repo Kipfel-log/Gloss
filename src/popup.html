@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Gloss</title>
+  <link rel="stylesheet" href="ui.css">
+  <style>
+    body { width: 340px; }
+    header { display: flex; align-items: center; padding: 16px 16px 12px; }
+    h1 { font: 500 24px/1 var(--serif); letter-spacing: -.02em; margin: 0; }
+    header .btn { margin-left: auto; padding: 6px 10px; }
+    .card { margin: 0 12px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+    .eyebrow { font: 600 11px/1 var(--sans); letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
+    .warn { margin-top: 8px; font-size: 12.5px; color: var(--warn); }
+    .warn a { margin-left: 4px; }
+    .rows { margin: 12px 12px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 44px; }
+    .row + .row { border-top: 1px solid var(--line); }
+    .row .t { flex: 1; min-width: 0; }
+    .row .t small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .row.dim .t { opacity: .45; }
+    .row .dd { width: 128px; }
+    .row .dd-btn { padding: 6px 10px; font-size: 13px; }
+    .usage {
+      display: flex; align-items: center; gap: 14px; margin: 12px; padding: 12px 14px;
+      background: var(--sunk); border-radius: 14px; border: 1px solid var(--line); cursor: pointer;
+    }
+    .usage:hover { border-color: var(--line-strong); }
+    .num { font: 500 20px/1.1 var(--serif); }
+    .usage .lab { font-size: 11.5px; color: var(--muted); }
+    .usage .go { margin-left: auto; color: var(--muted); font-size: 12.5px; }
+    footer { display: flex; justify-content: space-between; padding: 0 16px 14px; font-size: 11.5px; color: var(--faint); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Gloss</h1>
+    <button class="btn quiet" id="openOptions" title="完整设置">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 10.2a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4z" stroke="currentColor" stroke-width="1.4"/><path d="M13 8c0-.4 0-.8-.1-1.1l1.3-1-1.2-2.1-1.6.6a5 5 0 00-1.9-1.1L9.2 1.6H6.8l-.3 1.7a5 5 0 00-1.9 1.1l-1.6-.6L1.8 5.9l1.3 1C3 7.2 3 7.6 3 8s0 .8.1 1.1l-1.3 1 1.2 2.1 1.6-.6c.5.5 1.2.9 1.9 1.1l.3 1.7h2.4l.3-1.7a5 5 0 001.9-1.1l1.6.6 1.2-2.1-1.3-1c.1-.3.1-.7.1-1.1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      完整设置
+    </button>
+  </header>
+
+  <div class="card">
+    <p class="eyebrow">翻译引擎</p>
+    <div id="provider"></div>
+    <div class="warn" id="noKey" hidden>还没有填写 API Key<a href="#" id="goKey">去填写 →</a></div>
+  </div>
+
+  <div class="rows">
+    <div class="row">
+      <div class="t">启用 Gloss</div>
+      <label class="sw"><input type="checkbox" id="enabled"><span class="track"></span></label>
+    </div>
+    <div class="row dep">
+      <div class="t">选中后直接翻译<small>关闭时先显示 G 图标</small></div>
+      <label class="sw"><input type="checkbox" id="direct"><span class="track"></span></label>
+    </div>
+    <div class="row dep">
+      <div class="t">显示整句翻译<small>关闭后点击才显示</small></div>
+      <label class="sw"><input type="checkbox" id="showSentence"><span class="track"></span></label>
+    </div>
+    <div class="row dep">
+      <div class="t">自动打开剑桥词典</div>
+      <label class="sw"><input type="checkbox" id="autoCambridge"><span class="track"></span></label>
+    </div>
+    <div class="row dep">
+      <div class="t">按 Shift 翻译段落<small>鼠标停在段落上，单按一下</small></div>
+      <label class="sw"><input type="checkbox" id="paraEnabled"><span class="track"></span></label>
+    </div>
+    <div class="row dep">
+      <div class="t">译文样式</div>
+      <div id="paraStyle" class="up right"></div>
+    </div>
+  </div>
+
+  <div class="usage" id="usage" title="查看用量统计">
+    <div><div class="num" id="uCalls">0</div><div class="lab">今日调用</div></div>
+    <div><div class="num" id="uTokens">0</div><div class="lab">今日 tokens</div></div>
+    <div><div class="num" id="uMs">—</div><div class="lab">平均耗时</div></div>
+    <span class="go">用量 →</span>
+  </div>
+
+  <footer><span id="ver"></span><span><kbd>Alt</kbd>+<kbd>C</kbd> 剑桥 · <kbd>Shift</kbd> 段落</span></footer>
+
+  <script src="shared.js"></script>
+  <script src="ui.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
