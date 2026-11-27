@@ -54,6 +54,7 @@ function renderProviders() {
     lab.append(el('span', 'dd-main', PROVIDERS[id].name), el('span', 'dd-sub', PROVIDERS[id].hint));
     it.appendChild(lab);
     it.addEventListener('click', async () => {
+      openCards.add(id);
       const patch = { added: [...S.added, id] };
       if (!S.provider || !S.added.includes(S.provider)) patch.provider = id;
       await save(patch, true);
@@ -77,25 +78,59 @@ async function removeProvider(id) {
   toast('已移除');
 }
 
+const openCards = new Set(); // 当前展开的服务商（只记在页面里）
+
 function providerCard(id) {
   const P = PROVIDERS[id];
-  const card = el('div', 'pv' + (S.provider === id ? ' active' : ''));
+  const isOpen = openCards.has(id);
+  const card = el('div', 'pv' + (S.provider === id ? ' active' : '') + (isOpen ? ' open' : ''));
 
-  // 头部
-  const head = el('div', 'pv-head');
-  const title = el('div');
-  title.append(el('div', 'pv-name', P.name), el('div', 'pv-hint', P.hint));
-  head.appendChild(title);
+  // ---------- 摘要行（点击展开 / 折叠） ----------
+  const sum = el('div', 'pv-sum');
+  sum.setAttribute('role', 'button');
+  sum.tabIndex = 0;
+  const title = el('div', 'pv-title');
+  title.append(el('span', 'pv-name', P.name), el('span', 'pv-hint', P.hint));
+  const model = el('span', 'pv-chip mono', S.models[id] || '未设置模型');
+  model.title = S.models[id] || '';
+  const keyChip = el('span', 'pv-chip');
+  const paintKey = () => {
+    const has = !!(S.keys[id] || '').trim();
+    keyChip.textContent = has ? 'Key 已填' : '未填 Key';
+    keyChip.classList.toggle('warn', !has);
+  };
+  paintKey();
+  sum.append(title, model, keyChip);
   if (S.provider === id) {
-    head.appendChild(el('span', 'badge', '正在使用'));
+    sum.appendChild(el('span', 'badge', '正在使用'));
   } else {
     const use = el('button', 'btn use', '设为当前');
-    use.addEventListener('click', async () => { await save({ provider: id }); renderProviders(); });
-    head.appendChild(use);
+    use.type = 'button';
+    use.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await save({ provider: id });
+      renderProviders();
+    });
+    sum.appendChild(use);
   }
-  card.appendChild(head);
+  sum.insertAdjacentHTML('beforeend', '<svg class="pv-chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  const toggle = () => {
+    if (openCards.has(id)) openCards.delete(id); else openCards.add(id);
+    card.classList.toggle('open', openCards.has(id));
+    body.hidden = !openCards.has(id);
+  };
+  sum.addEventListener('click', toggle);
+  sum.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  card.appendChild(sum);
 
-  // 自定义：接口地址
+  // ---------- 展开内容：三栏 ----------
+  const body = el('div', 'pv-body');
+  body.hidden = !isOpen;
+
+  // 第一栏：连接
+  const conn = el('div', 'pv-col');
+  conn.appendChild(el('h4', null, '连接'));
+
   if (id === 'custom') {
     const f = el('label', 'fl');
     f.appendChild(el('span', null, '接口地址（OpenAI 兼容）'));
@@ -121,10 +156,9 @@ function providerCard(id) {
     });
     row.append(url, ok);
     f.appendChild(row);
-    card.appendChild(f);
+    conn.appendChild(f);
   }
 
-  // API Key
   const kf = el('label', 'fl');
   kf.appendChild(el('span', null, 'API Key'));
   const krow = el('div', 'key-row');
@@ -134,7 +168,7 @@ function providerCard(id) {
   key.spellcheck = false;
   key.placeholder = '粘贴 Key';
   key.value = S.keys[id] || '';
-  const saveKey = debounce(() => save({ keys: { ...S.keys, [id]: key.value.trim() } }), 500);
+  const saveKey = debounce(() => save({ keys: { ...S.keys, [id]: key.value.trim() } }).then(paintKey), 500);
   key.addEventListener('input', saveKey);
   const eye = el('button', 'btn', '显示');
   eye.type = 'button';
@@ -145,9 +179,8 @@ function providerCard(id) {
   });
   krow.append(key, eye);
   kf.appendChild(krow);
-  card.appendChild(kf);
+  conn.appendChild(kf);
 
-  // 模型
   const mf = el('div', 'fl');
   mf.appendChild(el('span', null, '模型'));
   const custom = el('input', 'input mono');
@@ -155,7 +188,6 @@ function providerCard(id) {
   const saveModel = debounce(() => save({ models: { ...S.models, [id]: custom.value.trim() } }), 500);
   custom.addEventListener('input', saveModel);
   custom.addEventListener('change', () => setTimeout(renderProviders, 600));
-
   if (P.models.length) {
     const cur = S.models[id];
     const isPreset = P.models.includes(cur);
@@ -184,15 +216,8 @@ function providerCard(id) {
     custom.value = S.models[id] || '';
     mf.appendChild(custom);
   }
-  card.appendChild(mf);
+  conn.appendChild(mf);
 
-  // 思考强度（按当前模型保存）
-  card.appendChild(thinkBlock(id));
-
-  // 价格（用于成本估计）
-  card.appendChild(pricingBlock(id));
-
-  // 底部：测试 + 获取 Key
   const foot = el('div', 'pv-foot');
   const test = el('button', 'btn', '测试连接');
   const status = el('span', 'status');
@@ -204,18 +229,29 @@ function providerCard(id) {
     status.className = 'status ' + (r?.ok ? 'ok' : 'bad');
   });
   foot.append(test, status);
+  conn.appendChild(foot);
+  const links = el('div', 'pv-links');
   if (P.console) {
     const a = el('a', null, '获取 Key ↗');
     a.href = P.console;
     a.target = '_blank';
     a.rel = 'noopener';
-    foot.appendChild(a);
+    links.appendChild(a);
   }
-  const rm = el('button', 'btn quiet danger', '移除');
+  const rm = el('button', 'btn quiet danger', '移除这家服务商');
   rm.type = 'button';
   rm.addEventListener('click', () => removeProvider(id));
-  foot.appendChild(rm);
-  card.appendChild(foot);
+  links.appendChild(rm);
+  conn.appendChild(links);
+
+  // 第二栏：思考强度；第三栏：价格
+  const think = el('div', 'pv-col');
+  think.appendChild(thinkBlock(id));
+  const price = el('div', 'pv-col');
+  price.appendChild(pricingBlock(id));
+
+  body.append(conn, think, price);
+  card.appendChild(body);
   return card;
 }
 
@@ -233,7 +269,7 @@ function thinkBlock(id) {
   const head = el('div', 'think-head');
   const tag = el('span', 'think-model', '按模型保存 · ' + (model || '未设置模型'));
   tag.title = model;
-  head.append(el('span', null, '思考强度'), tag);
+  head.append(el('h4', null, '思考强度'), tag);
   box.appendChild(head);
 
   const autoBox = el('div', 'auto-box');
@@ -292,11 +328,8 @@ function thinkBlock(id) {
 function pricingBlock(id) {
   const pr = { ...S.pricing[id] };
   const savePr = () => save({ pricing: { ...S.pricing, [id]: { ...pr } } });
-  const box = el('details', 'price');
-  const sum = el('summary', null, '价格');
-  const brief = el('span', 'price-brief', `输入 ${glossFmtMoney(pr.miss, pr.cur)} · 输出 ${glossFmtMoney(pr.out, pr.cur)} / 百万 tokens`);
-  sum.appendChild(brief);
-  box.appendChild(sum);
+  const box = el('div', 'price');
+  box.appendChild(el('h4', null, '价格'));
 
   const cur = el('div', 'seg');
   for (const [v, l] of [['USD', '美元 $'], ['CNY', '人民币 ¥']]) {
@@ -320,7 +353,7 @@ function pricingBlock(id) {
     w.appendChild(inp);
     return w;
   };
-  grid.append(field('miss', '输入'), field('hit', '输入（命中缓存）'), field('out', '输出'));
+  grid.append(field('miss', '输入'), field('hit', '缓存命中'), field('out', '输出'));
 
   const row = el('div', 'price-row');
   const sw = el('label', 'sw');
@@ -566,6 +599,7 @@ function setupNav() {
 
 async function init() {
   S = await glossLoad();
+  if (S.provider) openCards.add(S.provider);
   $('ver').textContent = 'v' + GLOSS_VERSION;
   renderProviders();
   renderBehavior();
