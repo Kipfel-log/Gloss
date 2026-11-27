@@ -178,10 +178,9 @@ async function lookup(req, port, signal) {
   // 先用主服务商；限流（429）且开了后备时，换后备服务商重试一次
   let a = prim;
   let fallbackFrom = null;
-  // 思考档位按主服务商的方案算好；切到后备时沿用同一档，体验保持一致
-  const level = glossPickLevel(prim.profile, req.mode, req);
   while (true) {
-    const r = await callModel(a, req, port, signal, s, level);
+    // 思考方案跟着模型走：后备服务商用它自己的方案
+    const r = await callModel(a, req, port, signal, s, glossPickLevel(a.profile, req.mode, req));
     if (r.ok) {
       if (r.full) {
         const val = r.reasoning || fallbackFrom ? { t: r.full, r: r.reasoning } : r.full;
