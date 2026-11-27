@@ -32,7 +32,7 @@
 ### API Key 安全
 
 - Key 只在设置页填写，保存在 `chrome.storage.local`
-- 只由 background 读取和使用，content script 和网页都拿不到
+- 只由 background 读取和使用；content script 的代码不读取它，网页（与插件隔离）拿不到
 - 不提交到仓库，不发在聊天里
 
 ## 三、划词：发送什么、返回什么

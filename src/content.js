@@ -1,0 +1,398 @@
+// Gloss 划词：检测选中文字、抓取上下文、在旁边显示小窗。
+// 所有界面都放在 Shadow DOM 里，不受网页样式影响，也不影响网页。
+(() => {
+  if (window.__glossLoaded) return;
+  window.__glossLoaded = true;
+
+  const CAMBRIDGE = 'https://dictionary.cambridge.org/dictionary/english-chinese-simplified/';
+
+  // 只读取非敏感设置；API Key 只在后台读取
+  const settings = { triggerMode: 'icon', autoCambridge: false };
+  chrome.storage.local.get({ triggerMode: 'icon', autoCambridge: false })
+    .then((s) => Object.assign(settings, s))
+    .catch(() => {});
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    for (const k of ['triggerMode', 'autoCambridge']) {
+      if (changes[k]) settings[k] = changes[k].newValue;
+    }
+  });
+
+  // ---------- 样式 ----------
+
+  const CSS = `
+:host { all: initial; }
+.g-icon, .g-pop {
+  --bg: #FAF9F5; --surface: #FFFFFF; --text: #141413; --muted: #73726C;
+  --line: #E6E3D8; --chip: #F0EEE6; --accent: #C96442; --accent-soft: rgba(201,100,66,.10);
+  --shadow: 0 1px 2px rgba(20,20,19,.04), 0 8px 28px rgba(20,20,19,.10);
+  --serif: "Iowan Old Style", "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  .g-icon, .g-pop {
+    --bg: #262624; --surface: #30302E; --text: #F3F2EC; --muted: #A5A399;
+    --line: #3D3C38; --chip: #353431; --accent: #E0866A; --accent-soft: rgba(224,134,106,.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 32px rgba(0,0,0,.45);
+  }
+}
+.g-icon {
+  position: absolute; width: 26px; height: 26px; padding: 0; margin: 0;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+  color: var(--accent); font: 600 15px/24px var(--serif); text-align: center;
+  cursor: pointer; box-shadow: var(--shadow); transition: transform .12s ease;
+}
+.g-icon:hover { transform: translateY(-1px); border-color: var(--accent); }
+
+.g-pop {
+  position: absolute; box-sizing: border-box; width: 360px; max-width: calc(100vw - 16px);
+  padding: 14px 16px 10px; border-radius: 14px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line);
+  box-shadow: var(--shadow); font: 400 14px/1.65 var(--sans);
+  text-align: left; animation: g-in .14s ease-out;
+}
+.g-pop.wide { width: 440px; }
+.g-pop.above { transform: translateY(-100%); animation: none; }
+@keyframes g-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.g-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.g-head {
+  font: 500 21px/1.25 var(--serif); letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.g-kicker { font: 600 11px/1 var(--sans); letter-spacing: .08em; color: var(--muted); }
+.g-pos {
+  flex-shrink: 0; font: 500 12px/1.4 var(--sans); color: var(--accent);
+  background: var(--accent-soft); padding: 1px 7px; border-radius: 6px;
+}
+.g-pos:empty:not(.skel) { display: none; }
+.g-close {
+  margin-left: auto; flex-shrink: 0; align-self: center; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--muted);
+  font: 18px/24px var(--sans); cursor: pointer;
+}
+.g-close:hover { background: var(--chip); color: var(--text); }
+
+.g-meaning { font-size: 15px; margin: 2px 0 8px; }
+.g-colloc {
+  display: flex; gap: 8px; align-items: baseline; margin: 0 0 8px;
+  padding: 6px 10px; background: var(--chip); border-radius: 8px; font-size: 13px;
+}
+.g-colloc[hidden] { display: none; }
+.g-sep { height: 1px; background: var(--line); margin: 10px 0 8px; }
+.g-label { font: 600 11px/1.6 var(--sans); letter-spacing: .06em; color: var(--muted); flex-shrink: 0; }
+.g-sentence { font-size: 13.5px; color: var(--text); }
+.g-trans { font-size: 15px; margin-top: 2px; white-space: pre-wrap; }
+
+.g-foot {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 8px;
+  border-top: 1px solid var(--line); font: 12px/1.4 var(--sans); color: var(--muted);
+}
+.g-cam {
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font: 500 12px/1 var(--sans); padding: 6px 10px; border-radius: 8px; cursor: pointer;
+}
+.g-cam:hover { border-color: var(--accent); color: var(--accent); }
+.g-status { margin-left: auto; }
+
+.g-error { font-size: 13.5px; color: var(--text); padding: 4px 0 2px; }
+.g-error button {
+  display: inline-block; margin-top: 10px; border: 0; border-radius: 8px; cursor: pointer;
+  background: var(--accent); color: #fff; font: 500 13px/1 var(--sans); padding: 8px 12px;
+}
+
+.skel { display: inline-block; width: 44px; height: 1.2em; }
+.skel-block { min-height: 1.3em; }
+.skel, .skel-block {
+  border-radius: 6px; color: transparent;
+  background: linear-gradient(90deg, var(--chip) 0%, var(--line) 50%, var(--chip) 100%);
+  background-size: 200% 100%; animation: g-shimmer 1.1s linear infinite;
+}
+@keyframes g-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+`;
+
+  const WORD_TPL = `
+<div class="g-top"><span class="g-head"></span><span class="g-pos skel"></span>
+  <button class="g-close" title="关闭 (Esc)">×</button></div>
+<div class="g-meaning skel-block"></div>
+<div class="g-colloc" hidden><span class="g-label">搭配</span><span class="g-colloc-text"></span></div>
+<div class="g-sep"></div>
+<div class="g-label">整句</div>
+<div class="g-sentence skel-block"></div>
+<div class="g-foot"><button class="g-cam" title="Alt+C">剑桥词典 ↗</button><span class="g-status"></span></div>`;
+
+  const SENT_TPL = `
+<div class="g-top"><span class="g-kicker">翻译</span>
+  <button class="g-close" title="关闭 (Esc)">×</button></div>
+<div class="g-trans skel-block"></div>
+<div class="g-foot"><span class="g-status"></span></div>`;
+
+  // ---------- 根节点 ----------
+
+  let host = null, root = null, iconEl = null, popEl = null, port = null, current = null;
+
+  function ensureRoot() {
+    if (host && host.isConnected) return;
+    host = document.createElement('gloss-root');
+    host.style.cssText = 'all:initial;position:absolute;top:0;left:0;width:0;height:0;z-index:2147483647;';
+    root = host.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    root.appendChild(style);
+    document.documentElement.appendChild(host);
+  }
+
+  const q = (sel) => popEl && popEl.querySelector(sel);
+  const inHost = (e) => host && e.composedPath().includes(host);
+
+  // ---------- 上下文 ----------
+
+  const BLOCK = 'p,li,td,th,dd,dt,blockquote,h1,h2,h3,h4,h5,h6,figcaption,pre,summary,caption,label';
+
+  function getContext(range, text) {
+    let node = range.commonAncestorContainer;
+    if (node.nodeType !== 1) node = node.parentElement;
+    const block = (node && node.closest(BLOCK)) || node;
+    let para = ((block && (block.innerText || block.textContent)) || text).replace(/\s+/g, ' ').trim();
+    let idx = para.indexOf(text);
+    if (idx < 0) { para = text; idx = 0; }
+    if (para.length > 1500) {
+      const start = Math.max(0, idx - 700);
+      para = para.slice(start, start + 1500);
+      idx -= start;
+    }
+    // 句末：. ! ? 。！？ 后面接空白、引号或括号（或段落结束）
+    const isEnd = (i) => /[.!?。！？]/.test(para[i]) && (i + 1 >= para.length || /[\s"'”’)\]]/.test(para[i + 1]));
+    let a = idx;
+    while (a > 0 && !isEnd(a - 1)) a--;
+    let b = idx + text.length;
+    while (b < para.length && !isEnd(b)) b++;
+    if (b < para.length) b++;
+    const sentence = para.slice(a, b).trim();
+
+    const words = text.split(' ').length;
+    const isWord = words <= 4 && text.length <= 60 && !/[.!?。！？;]\s/.test(text);
+    return {
+      selection: text,
+      sentence,
+      paragraph: para,
+      title: document.title.slice(0, 200),
+      mode: isWord ? 'word' : 'sentence',
+    };
+  }
+
+  // ---------- 选中检测 ----------
+
+  function handleSelection(e) {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+    const text = sel.toString().replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 2000 || !/[A-Za-z]/.test(text)) return;
+    const range = sel.getRangeAt(0);
+    const r = range.getBoundingClientRect();
+    if (!r.width && !r.height) return;
+
+    const payload = {
+      ...getContext(range, text),
+      rect: { left: r.left + scrollX, right: r.right + scrollX, top: r.top + scrollY, bottom: r.bottom + scrollY },
+    };
+    if (settings.triggerMode === 'direct') openPopup(payload);
+    else showIcon(e.pageX + 8, e.pageY + 10, payload);
+  }
+
+  document.addEventListener('mouseup', (e) => {
+    if (e.button !== 0 || inHost(e)) return;
+    setTimeout(() => handleSelection(e), 0);
+  }, true);
+
+  document.addEventListener('mousedown', (e) => {
+    if (inHost(e)) return;
+    hideIcon();
+    closePopup();
+  }, true);
+
+  document.addEventListener('keydown', (e) => {
+    if (!popEl) return;
+    if (e.key === 'Escape') {
+      closePopup();
+    } else if (e.altKey && e.code === 'KeyC' && current && current.mode === 'word') {
+      e.preventDefault();
+      openCambridge(true);
+    }
+  }, true);
+
+  // ---------- 小图标 ----------
+
+  function showIcon(x, y, payload) {
+    ensureRoot();
+    hideIcon();
+    iconEl = document.createElement('button');
+    iconEl.className = 'g-icon';
+    iconEl.textContent = 'G';
+    iconEl.title = 'Gloss 翻译';
+    iconEl.style.left = Math.min(x, scrollX + innerWidth - 36) + 'px';
+    iconEl.style.top = y + 'px';
+    iconEl.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+    iconEl.addEventListener('click', (e) => { e.stopPropagation(); hideIcon(); openPopup(payload); });
+    root.appendChild(iconEl);
+  }
+
+  function hideIcon() {
+    if (iconEl) { iconEl.remove(); iconEl = null; }
+  }
+
+  // ---------- 小窗 ----------
+
+  function openPopup(p) {
+    ensureRoot();
+    closePopup();
+    current = { ...p, buffer: '', fields: {}, done: false };
+    popEl = document.createElement('div');
+    popEl.className = 'g-pop' + (p.mode === 'word' ? '' : ' wide');
+    popEl.setAttribute('role', 'dialog');
+    popEl.innerHTML = p.mode === 'word' ? WORD_TPL : SENT_TPL; // 模板是固定字符串，不含网页内容
+    root.appendChild(popEl);
+    popEl.addEventListener('mousedown', (e) => e.stopPropagation());
+    q('.g-close').addEventListener('click', closePopup);
+    if (p.mode === 'word') {
+      q('.g-head').textContent = p.selection;
+      q('.g-cam').addEventListener('click', () => openCambridge(true));
+    }
+    position(p.rect);
+    startLookup(p);
+  }
+
+  function position(rect) {
+    const w = popEl.offsetWidth;
+    const left = Math.max(scrollX + 8, Math.min(rect.left, scrollX + innerWidth - w - 8));
+    popEl.style.left = left + 'px';
+    const spaceBelow = scrollY + innerHeight - rect.bottom;
+    if (spaceBelow < 260 && rect.top - scrollY > spaceBelow) {
+      // 下方放不下就放到上方，并向上生长，流式输出时不会盖住原文
+      popEl.classList.add('above');
+      popEl.style.top = (rect.top - 8) + 'px';
+    } else {
+      popEl.style.top = (rect.bottom + 8) + 'px';
+    }
+  }
+
+  function closePopup() {
+    if (popEl) { popEl.remove(); popEl = null; }
+    current = null;
+    if (port) { try { port.disconnect(); } catch {} port = null; }
+  }
+
+  function setStatus(text) {
+    const el = q('.g-status');
+    if (el) el.textContent = text;
+  }
+
+  // ---------- 请求与渲染 ----------
+
+  function startLookup(p) {
+    let myPort;
+    try {
+      myPort = chrome.runtime.connect({ name: 'gloss' });
+    } catch {
+      showError({ message: 'Gloss 刚刚更新过，请刷新这个网页后再试。' });
+      return;
+    }
+    port = myPort;
+    myPort.onMessage.addListener((m) => { if (port === myPort) onMessage(m); });
+    myPort.onDisconnect.addListener(() => { if (port === myPort) port = null; });
+    myPort.postMessage({
+      mode: p.mode, selection: p.selection, sentence: p.sentence,
+      paragraph: p.paragraph, title: p.title,
+    });
+  }
+
+  function onMessage(m) {
+    if (!current || !popEl) return;
+    if (m.type === 'delta') {
+      current.buffer += m.text;
+      render(false);
+    } else if (m.type === 'done') {
+      current.done = true;
+      render(true);
+      setStatus(m.cached ? '来自缓存' : '');
+      if (current.mode === 'word' && settings.autoCambridge) openCambridge(false);
+    } else if (m.type === 'error') {
+      showError(m);
+    }
+  }
+
+  function parseFields(buf) {
+    const f = {};
+    let key = null;
+    for (const raw of buf.split('\n')) {
+      const line = raw.trim();
+      const mm = line.match(/^(LEMMA|POS|MEANING|COLLOCATION|SENTENCE)\s*[:：]\s*(.*)$/i);
+      if (mm) { key = mm[1].toUpperCase(); f[key] = mm[2]; }
+      else if (key && line) f[key] += ' ' + line;
+    }
+    return f;
+  }
+
+  function fill(sel, value, final) {
+    const el = q(sel);
+    if (!el) return;
+    if (value) {
+      el.textContent = value;
+      el.classList.remove('skel', 'skel-block');
+    } else if (final) {
+      el.textContent = sel === '.g-pos' ? '' : '—';
+      el.classList.remove('skel', 'skel-block');
+    }
+  }
+
+  function render(final) {
+    if (current.mode === 'word') {
+      const f = parseFields(current.buffer);
+      current.fields = f;
+      fill('.g-pos', f.POS, final);
+      fill('.g-meaning', f.MEANING, final);
+      fill('.g-sentence', f.SENTENCE, final);
+      const c = (f.COLLOCATION || '').trim();
+      const box = q('.g-colloc');
+      if (c && !/^(无|none|n\/a|-|—)[。.]?$/i.test(c)) {
+        box.hidden = false;
+        q('.g-colloc-text').textContent = c;
+      } else {
+        box.hidden = true;
+      }
+    } else {
+      fill('.g-trans', current.buffer.trim(), final);
+    }
+  }
+
+  function showError(m) {
+    if (!popEl) return;
+    [...popEl.children].forEach((el) => { if (!el.classList.contains('g-top')) el.remove(); });
+    const box = document.createElement('div');
+    box.className = 'g-error';
+    box.textContent = m.message || '出错了。';
+    if (m.code === 'no-key') {
+      box.appendChild(document.createElement('br'));
+      const btn = document.createElement('button');
+      btn.textContent = '打开设置';
+      btn.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'open-options' }));
+      box.appendChild(btn);
+    }
+    popEl.appendChild(box);
+  }
+
+  function openCambridge(active) {
+    if (!current || current.mode !== 'word') return;
+    const word = (current.fields.LEMMA || current.selection)
+      .toLowerCase()
+      .replace(/[^a-z0-9'\- ]/g, '')
+      .trim()
+      .replace(/\s+/g, '-');
+    if (!word) return;
+    try {
+      chrome.runtime.sendMessage({ type: 'open-tab', url: CAMBRIDGE + encodeURIComponent(word), active });
+    } catch { /* 插件已重新加载 */ }
+  }
+})();

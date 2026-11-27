@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Gloss",
+  "version": "0.1.0",
+  "description": "结合上下文的划词翻译，调用你自己的大模型 API。",
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.deepseek.com/*"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/options.html",
+  "action": {
+    "default_title": "Gloss 设置"
+  }
+}

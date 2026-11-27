@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gloss 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Gloss</h1>
+      <p class="lede">结合上下文的划词翻译。选中网页上的英文，点一下旁边的 <span class="g">G</span>，就能看到这个词在这句话里的意思。</p>
+    </header>
+
+    <section>
+      <h2>模型</h2>
+
+      <label class="field">
+        <span class="name">API Key</span>
+        <span class="row">
+          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
+          <button type="button" id="toggleKey" class="ghost">显示</button>
+        </span>
+        <span class="hint">在 DeepSeek 开放平台创建。只保存在这台电脑的浏览器里，不会上传到任何地方。</span>
+      </label>
+
+      <label class="field">
+        <span class="name">模型</span>
+        <select id="modelSelect">
+          <option value="deepseek-flash">deepseek-flash（推荐：快、便宜）</option>
+          <option value="deepseek-v4-pro">deepseek-v4-pro（更强、更贵）</option>
+          <option value="custom">自定义…</option>
+        </select>
+        <input id="modelCustom" type="text" spellcheck="false" placeholder="模型名" hidden>
+      </label>
+
+      <details>
+        <summary>高级</summary>
+        <label class="field">
+          <span class="name">接口地址（OpenAI 兼容格式）</span>
+          <input id="baseUrl" type="url" spellcheck="false" placeholder="https://api.deepseek.com">
+          <span class="hint">一般不用改。换成其他服务商时，保存会请求访问该网址的权限。</span>
+        </label>
+      </details>
+    </section>
+
+    <section>
+      <h2>使用</h2>
+
+      <div class="field">
+        <span class="name">触发方式</span>
+        <label class="choice"><input type="radio" name="triggerMode" value="icon"> 选中后显示小图标，点击再翻译</label>
+        <label class="choice"><input type="radio" name="triggerMode" value="direct"> 选中后直接翻译</label>
+      </div>
+
+      <label class="switch">
+        <input id="autoCambridge" type="checkbox">
+        <span>查词时自动在后台打开剑桥词典</span>
+      </label>
+      <p class="hint">关闭时也可以点小窗里的“剑桥词典 ↗”，或按 <kbd>Alt</kbd> + <kbd>C</kbd>。</p>
+    </section>
+
+    <footer>
+      <button id="save" class="primary">保存</button>
+      <button id="test" class="ghost">测试连接</button>
+      <span id="status" role="status"></span>
+    </footer>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>
