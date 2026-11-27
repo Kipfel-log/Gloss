@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gloss",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "结合上下文的划词翻译与段落翻译，调用你自己的大模型 API。",
   "permissions": [
     "storage"

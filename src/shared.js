@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.7.1';
+const GLOSS_VERSION = '1.8.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -153,7 +153,13 @@ function glossActive(s) {
 // auto 按英文单词数分档：≤ t1 关闭，≤ t2 低，≤ t3 中，更长用高。
 // 划词时数的是“所在句子”的单词数（句子越长越绕），整句 / 段落数的是要翻译的文字本身。
 
-const THINK_DEFAULT_PROFILE = { word: 'off', para: 'off', t1: 15, t2: 40, t3: 100 };
+// rules：按单词数从小到大，“不超过 max 词就用 lv 档”；都不满足时用 rest 档
+const THINK_DEFAULT_PROFILE = {
+  word: 'off',
+  para: 'off',
+  rules: [{ max: 15, lv: 'off' }, { max: 40, lv: 'low' }, { max: 100, lv: 'medium' }],
+  rest: 'high',
+};
 
 function glossProfileKey(id, model) {
   return `${id}|${model}`;
@@ -162,7 +168,16 @@ function glossProfileKey(id, model) {
 function glossThinkProfile(s, id, model) {
   const legacy = (s.thinking || {})[id];
   const base = legacy && legacy !== 'off' ? { word: legacy, para: legacy } : {};
-  return { ...THINK_DEFAULT_PROFILE, ...base, ...((s.thinkProfiles || {})[glossProfileKey(id, model)] || {}) };
+  const saved = (s.thinkProfiles || {})[glossProfileKey(id, model)] || {};
+  const p = { ...THINK_DEFAULT_PROFILE, ...base, ...saved };
+  // v1.3–v1.7 用的是 t1 / t2 / t3 三个固定阈值，转换成规则列表
+  if (!saved.rules && saved.t1 != null) {
+    p.rules = [{ max: saved.t1, lv: 'off' }, { max: saved.t2, lv: 'low' }, { max: saved.t3, lv: 'medium' }];
+    p.rest = 'high';
+  }
+  p.rules = (p.rules || []).map((r) => ({ max: Math.max(1, Math.round(Number(r.max) || 1)), lv: r.lv || 'off' }));
+  delete p.t1; delete p.t2; delete p.t3;
+  return p;
 }
 
 function glossWordCount(text) {
@@ -173,10 +188,9 @@ function glossPickLevel(profile, mode, req) {
   const set = mode === 'word' ? profile.word : profile.para;
   if (set !== 'auto') return set || 'off';
   const n = glossWordCount(mode === 'word' ? req.sentence || req.selection : req.selection);
-  if (n <= profile.t1) return 'off';
-  if (n <= profile.t2) return 'low';
-  if (n <= profile.t3) return 'medium';
-  return 'high';
+  const rules = [...(profile.rules || [])].sort((a, b) => a.max - b.max);
+  for (const r of rules) if (n <= r.max) return r.lv;
+  return profile.rest || 'off';
 }
 
 // ---------- 思考强度 ----------

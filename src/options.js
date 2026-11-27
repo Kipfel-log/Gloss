@@ -383,29 +383,59 @@ function thinkBlock(id) {
     return r;
   };
 
-  const line = el('div', 'auto-line');
-  const num = (field) => {
-    const inp = el('input', 'input mono');
-    inp.type = 'number';
-    inp.min = '1';
-    inp.value = prof[field];
-    inp.addEventListener('input', debounce(() => {
-      const v = Math.max(1, Math.round(Number(inp.value) || 1));
-      prof[field] = v;
-      saveProf();
-    }, 500));
-    return inp;
+  // 规则列表：每行“不超过 N 词 → 某档”，最后一行“更长 → 某档”；可加可删
+  const rulesBox = el('div', 'rules');
+  const levelSeg = (value, onChange) => {
+    const seg = el('div', 'seg small');
+    for (const t of THINK_LEVELS) {
+      const b = el('button', null, t.l);
+      b.type = 'button';
+      b.dataset.v = t.v;
+      seg.appendChild(b);
+    }
+    makeSeg(seg, value, onChange);
+    return seg;
   };
-  line.append(
-    el('span', 'lv off', '关闭'), el('span', null, '≤'), num('t1'), el('span', null, '词 <'),
-    el('span', 'lv', '低'), el('span', null, '≤'), num('t2'), el('span', null, '词 <'),
-    el('span', 'lv', '中'), el('span', null, '≤'), num('t3'), el('span', null, '词 <'),
-    el('span', 'lv', '高'),
-  );
+  const renderRules = () => {
+    rulesBox.textContent = '';
+    prof.rules.sort((a, b) => a.max - b.max);
+    prof.rules.forEach((r, i) => {
+      const line = el('div', 'rule');
+      const inp = el('input', 'input mono');
+      inp.type = 'number';
+      inp.min = '1';
+      inp.value = r.max;
+      inp.addEventListener('change', () => {
+        r.max = Math.max(1, Math.round(Number(inp.value) || 1));
+        saveProf();
+        renderRules(); // 改完按大小重新排序
+      });
+      const del = el('button', 'btn quiet rule-del', '删除');
+      del.type = 'button';
+      del.addEventListener('click', () => { prof.rules.splice(i, 1); saveProf(); renderRules(); });
+      line.append(el('span', 'rule-lab', '不超过'), inp, el('span', 'rule-lab', '词'), levelSeg(r.lv, (v) => { r.lv = v; saveProf(); }), del);
+      rulesBox.appendChild(line);
+    });
+    const last = el('div', 'rule');
+    last.append(el('span', 'rule-lab rule-rest', prof.rules.length ? '更长的' : '所有长度'), levelSeg(prof.rest, (v) => { prof.rest = v; saveProf(); }));
+    rulesBox.appendChild(last);
+  };
+  renderRules();
+
+  const add = el('button', 'btn rule-add', '＋ 添加一档');
+  add.type = 'button';
+  add.addEventListener('click', () => {
+    const top = prof.rules.length ? prof.rules[prof.rules.length - 1].max : 0;
+    prof.rules.push({ max: top ? top * 2 : 50, lv: 'off' });
+    saveProf();
+    renderRules();
+  });
+
   autoBox.append(
-    el('div', 'auto-title', '自动档位（按英文单词数）'),
-    line,
-    el('p', 'hint', '划词按所在句子的单词数，整句 / 段落按要翻译的内容本身。'),
+    el('div', 'auto-title', '自动档位（按英文单词数，从短到长依次匹配）'),
+    rulesBox,
+    add,
+    el('p', 'hint', '例：只要“短的不思考、长的低思考”，就留一行“不超过 150 词 → 关闭”，更长的选“低”。划词按所在句子的单词数，整句 / 段落按要翻译的内容本身。'),
   );
   syncAuto();
 

@@ -216,3 +216,13 @@ td .m { display: inline-block; max-width: 230px; overflow: hidden; text-overflow
 .fall-block { display: flex; flex-direction: column; gap: 12px; }
 .fall-block .dd { max-width: 360px; }
 .pv-col .pv-links { margin-top: 4px; }
+
+/* ---------- 自动档位规则（v1.8） ---------- */
+.rules { display: flex; flex-direction: column; gap: 6px; }
+.rule { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rule .input { width: 72px; padding: 5px 8px; text-align: center; }
+.rule-lab { font-size: 13px; color: var(--muted); }
+.rule-rest { min-width: 136px; }
+.rule-del { padding: 4px 8px; font-size: 12px; margin-left: auto; }
+.rule-add { align-self: flex-start; padding: 5px 10px; font-size: 12.5px; }
+.seg.small button { padding: 4px 9px; font-size: 12px; }
