@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.11.0';
+const GLOSS_VERSION = '1.11.1';
 
 const PROVIDERS = {
   deepseek: {
@@ -38,7 +38,7 @@ const PROVIDERS = {
   },
   inception: {
     name: 'Inception',
-    hint: 'Mercury 扩散模型，可显示扩散过程',
+    hint: 'Mercury 扩散模型 · 官方公告：API 2026-12-28 后停止服务',
     baseUrl: 'https://api.inceptionlabs.ai/v1',
     models: ['mercury-3', 'mercury-2.5'],
     extra: {},
