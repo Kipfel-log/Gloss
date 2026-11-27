@@ -5,6 +5,8 @@
   window.__glossLoaded = true;
 
   const CAMBRIDGE = 'https://dictionary.cambridge.org/dictionary/english-chinese-simplified/';
+  // 划词图标：直接内嵌 48px 图标，不需要把插件文件暴露给网页
+  const ICON_DATA = 'data:image/png;base64,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';
 
   // 只读取界面相关的开关；API Key 只在后台读取
   const UI_DEFAULTS = {
@@ -47,12 +49,13 @@
   }
 }
 .g-icon {
-  position: absolute; width: 26px; height: 26px; padding: 0; margin: 0;
-  border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
-  color: var(--accent); font: 600 15px/24px var(--serif); text-align: center;
-  cursor: pointer; box-shadow: var(--shadow); transition: transform .12s ease;
+  position: absolute; width: 26px; height: 26px; padding: 0; margin: 0; border: 0;
+  border-radius: 7px; background: transparent; cursor: pointer; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20,20,19,.12), 0 4px 14px rgba(20,20,19,.16);
+  transition: transform .12s ease, box-shadow .12s ease;
 }
-.g-icon:hover { transform: translateY(-1px); border-color: var(--accent); }
+.g-icon img { display: block; width: 26px; height: 26px; }
+.g-icon:hover { transform: translateY(-1px) scale(1.06); box-shadow: 0 2px 4px rgba(20,20,19,.14), 0 8px 20px rgba(20,20,19,.2); }
 
 .g-pop {
   position: absolute; box-sizing: border-box; width: 360px; max-width: calc(100vw - 16px);
@@ -248,7 +251,10 @@
     hideIcon();
     iconEl = document.createElement('button');
     iconEl.className = 'g-icon';
-    iconEl.textContent = 'G';
+    const img = document.createElement('img');
+    img.src = ICON_DATA;
+    img.alt = '';
+    iconEl.appendChild(img);
     iconEl.title = 'Gloss 翻译';
     iconEl.style.left = Math.min(x, scrollX + innerWidth - 36) + 'px';
     iconEl.style.top = y + 'px';
