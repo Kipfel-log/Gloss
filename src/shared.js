@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.0.0';
+const GLOSS_VERSION = '1.1.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -58,6 +58,16 @@ const PARA_STYLES = [
 
 const PARA_FONTS = [14, 15, 16, 17, 18];
 
+// 成本估算用的价格（每 100 万 tokens）。DeepSeek 预置官方价格（2026-11 核对）：
+// deepseek-flash 高峰：命中缓存 $0.006 / 未命中 $0.3 / 输出 $1.2；非高峰为高峰的一半。
+const PRICING_DEFAULTS = {
+  deepseek: { cur: 'USD', hit: 0.006, miss: 0.3, out: 1.2, offpeak: true },
+  qwen: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
+  siliconflow: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
+  openrouter: { cur: 'USD', hit: 0, miss: 0, out: 0, offpeak: false },
+  custom: { cur: 'USD', hit: 0, miss: 0, out: 0, offpeak: false },
+};
+
 const GLOSS_DEFAULTS = {
   provider: '',
   added: [], // 用户添加过的服务商；没添加的不显示
@@ -69,6 +79,8 @@ const GLOSS_DEFAULTS = {
     openrouter: 'baidu/ernie-5.5-flash-preview:free',
     custom: '',
   },
+  pricing: PRICING_DEFAULTS,
+  wordOnly: false,
   thinking: { deepseek: 'off', qwen: 'off', siliconflow: 'off', openrouter: 'off', custom: 'off' },
   customBaseUrl: '',
   enabled: true,
@@ -86,6 +98,8 @@ async function glossLoad() {
   s.keys = { ...GLOSS_DEFAULTS.keys, ...(raw.keys || {}) };
   s.models = { ...GLOSS_DEFAULTS.models, ...(raw.models || {}) };
   s.thinking = { ...GLOSS_DEFAULTS.thinking, ...(raw.thinking || {}) };
+  s.pricing = {};
+  for (const id of PROVIDER_ORDER) s.pricing[id] = { ...PRICING_DEFAULTS[id], ...((raw.pricing || {})[id] || {}) };
   // 0.1.0 的旧设置迁移
   if (raw.apiKey && !s.keys.deepseek) s.keys.deepseek = raw.apiKey;
   // 0.2.0 → 0.3.0：没有 added 列表时，把已经填过 Key 的服务商视为已添加
@@ -155,4 +169,40 @@ function glossFmtTokens(n) {
   if (n >= 1e4) return (n / 1e3).toFixed(0) + 'k';
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
   return String(n);
+}
+
+// ---------- 成本估算 ----------
+
+// DeepSeek 高峰时段：UTC 周一至周五 01:00–04:00、06:00–10:00（即北京时间 9–12 点、14–18 点）
+// 官方规则里中国法定节假日全天算非高峰，这里不识别节假日，所以节假日的估算会偏高。
+function glossIsPeak(t) {
+  const d = new Date(t);
+  const wd = d.getUTCDay();
+  const h = d.getUTCHours();
+  return wd >= 1 && wd <= 5 && ((h >= 1 && h < 4) || (h >= 6 && h < 10));
+}
+
+function glossCost(entry, pr) {
+  if (!pr) return 0;
+  const hit = entry.c || 0;
+  const miss = Math.max(0, (entry.i || 0) - hit);
+  let cost = (hit * pr.hit + miss * pr.miss + (entry.o || 0) * pr.out) / 1e6;
+  if (pr.offpeak && !glossIsPeak(entry.t)) cost /= 2;
+  return cost;
+}
+
+const CUR_SIGN = { USD: '$', CNY: '¥' };
+
+function glossFmtMoney(n, cur) {
+  const sign = CUR_SIGN[cur] || '';
+  if (!n) return sign + '0';
+  if (n < 0.01) return sign + n.toFixed(4);
+  if (n < 1) return sign + n.toFixed(3);
+  return sign + n.toFixed(2);
+}
+
+// costs: { USD: 0.01, CNY: 0.2 }
+function glossFmtCosts(costs) {
+  const parts = Object.entries(costs || {}).filter(([, v]) => v > 0).map(([c, v]) => glossFmtMoney(v, c));
+  return parts.length ? parts.join(' + ') : '$0';
 }

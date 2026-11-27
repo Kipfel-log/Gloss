@@ -74,13 +74,19 @@ function safePost(port, msg) {
 
 let usageChain = Promise.resolve();
 
-function recordUsage(kind, entry) {
+function recordUsage(kind, entry, pricing) {
   usageChain = usageChain.then(async () => {
     const { usageLog = [], usageDaily = {} } = await chrome.storage.local.get(['usageLog', 'usageDaily']);
     const key = glossDayKey(entry.t);
     const day = { calls: 0, i: 0, o: 0, c: 0, ms: 0, hits: 0, err: 0, ...(usageDaily[key] || {}) };
     if (kind === 'call') {
       day.calls += 1; day.i += entry.i; day.o += entry.o; day.c += entry.c; day.ms += entry.ms;
+      if (pricing) {
+        entry.$ = glossCost(entry, pricing);
+        entry.cur = pricing.cur;
+        day.cost = { ...(day.cost || {}) };
+        day.cost[pricing.cur] = (day.cost[pricing.cur] || 0) + entry.$;
+      }
       usageLog.push(entry);
       if (usageLog.length > 2000) usageLog.splice(0, usageLog.length - 2000);
     } else if (kind === 'hit') {
@@ -117,7 +123,7 @@ async function lookup(req, port, signal) {
   const cached = (await chrome.storage.session.get(cacheKey))[cacheKey];
   if (cached) {
     safePost(port, { type: 'delta', text: cached });
-    safePost(port, { type: 'done', cached: true });
+    safePost(port, { type: 'done', cached: true, provider: a.name, model: a.model });
     recordUsage('hit', { t: Date.now() });
     return;
   }
@@ -196,11 +202,11 @@ async function lookup(req, port, signal) {
       ms: Date.now() - t0,
       f: firstMs,
       nu: usage ? 0 : 1, // 1 = 服务商没有返回用量（多半是中途取消）
-    });
+    }, s.pricing[a.id]);
   }
 
   if (full) await chrome.storage.session.set({ [cacheKey]: full });
-  safePost(port, { type: 'done', cached: false });
+  safePost(port, { type: 'done', cached: false, provider: a.name, model: a.model });
 }
 
 chrome.runtime.onConnect.addListener((port) => {

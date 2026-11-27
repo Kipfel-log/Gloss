@@ -10,7 +10,7 @@
 
   // 只读取界面相关的开关；API Key 只在后台读取
   const UI_DEFAULTS = {
-    enabled: true, triggerMode: 'icon', showSentence: true, autoCambridge: false,
+    enabled: true, triggerMode: 'icon', showSentence: true, autoCambridge: false, wordOnly: false,
     paraEnabled: true, paraStyle: 'muted', paraFont: 16,
   };
   const settings = { ...UI_DEFAULTS };
@@ -113,7 +113,7 @@
   font: 500 12px/1 var(--sans); padding: 6px 10px; border-radius: 8px; cursor: pointer;
 }
 .g-cam:hover { border-color: var(--accent); color: var(--accent); }
-.g-status { margin-left: auto; }
+.g-status { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .g-error { font-size: 13.5px; color: var(--text); padding: 4px 0 2px; }
 .g-error button {
@@ -215,8 +215,10 @@
     const r = range.getBoundingClientRect();
     if (!r.width && !r.height) return;
 
+    const ctx = getContext(range, text);
+    if (settings.wordOnly && ctx.mode !== 'word') return; // 习惯性框选长段文字时不打扰
     const payload = {
-      ...getContext(range, text),
+      ...ctx,
       rect: { left: r.left + scrollX, right: r.right + scrollX, top: r.top + scrollY, bottom: r.bottom + scrollY },
     };
     if (settings.triggerMode === 'direct') openPopup(payload);
@@ -377,7 +379,8 @@
     } else if (m.type === 'done') {
       current.done = true;
       render(true);
-      setStatus(m.cached ? '来自缓存' : '');
+      const short = (m.model || '').split('/').pop();
+      setStatus(m.cached ? '来自缓存' : (m.provider ? `${m.provider} · ${short}` : ''));
       if (current.mode === 'word' && settings.autoCambridge) openCambridge(false);
     } else if (m.type === 'error') {
       showError(m);

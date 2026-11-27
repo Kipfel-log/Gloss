@@ -199,6 +199,9 @@ function providerCard(id) {
   tf.append(seg, el('p', 'hint', '关闭最快、最省；开启后对难句更准，但会更慢，思考过程也按输出 token 计费。'));
   card.appendChild(tf);
 
+  // 价格（用于成本估计）
+  card.appendChild(pricingBlock(id));
+
   // 底部：测试 + 获取 Key
   const foot = el('div', 'pv-foot');
   const test = el('button', 'btn', '测试连接');
@@ -226,6 +229,64 @@ function providerCard(id) {
   return card;
 }
 
+function pricingBlock(id) {
+  const pr = { ...S.pricing[id] };
+  const savePr = () => save({ pricing: { ...S.pricing, [id]: { ...pr } } });
+  const box = el('details', 'price');
+  const sum = el('summary', null, '价格');
+  const brief = el('span', 'price-brief', `输入 ${glossFmtMoney(pr.miss, pr.cur)} · 输出 ${glossFmtMoney(pr.out, pr.cur)} / 百万 tokens`);
+  sum.appendChild(brief);
+  box.appendChild(sum);
+
+  const cur = el('div', 'seg');
+  for (const [v, l] of [['USD', '美元 $'], ['CNY', '人民币 ¥']]) {
+    const b = el('button', null, l);
+    b.type = 'button';
+    b.dataset.v = v;
+    cur.appendChild(b);
+  }
+  makeSeg(cur, pr.cur, (v) => { pr.cur = v; savePr(); });
+
+  const grid = el('div', 'price-grid');
+  const field = (key, label) => {
+    const w = el('label', 'fl');
+    w.appendChild(el('span', null, label));
+    const inp = el('input', 'input mono');
+    inp.type = 'number';
+    inp.min = '0';
+    inp.step = 'any';
+    inp.value = pr[key];
+    inp.addEventListener('input', debounce(() => { pr[key] = Math.max(0, Number(inp.value) || 0); savePr(); }, 500));
+    w.appendChild(inp);
+    return w;
+  };
+  grid.append(field('miss', '输入'), field('hit', '输入（命中缓存）'), field('out', '输出'));
+
+  const row = el('div', 'price-row');
+  const sw = el('label', 'sw');
+  const cb = el('input');
+  cb.type = 'checkbox';
+  sw.append(cb, el('span', 'track'));
+  makeSwitch(cb, pr.offpeak, (v) => { pr.offpeak = v; savePr(); });
+  row.append(el('span', null, '峰谷计价：非高峰时段半价'), sw);
+
+  box.append(el('p', 'hint', '单位：每 100 万 tokens，填高峰时段的价格。'), cur, grid, row);
+
+  if (id === 'deepseek') {
+    const reset = el('button', 'btn', '恢复 DeepSeek 官方价格');
+    reset.type = 'button';
+    reset.addEventListener('click', async () => {
+      await save({ pricing: { ...S.pricing, deepseek: { ...PRICING_DEFAULTS.deepseek } } });
+      renderProviders();
+    });
+    box.append(
+      el('p', 'hint', '已预置 deepseek-flash 官方价格（2026 年 11 月核对）。高峰时段为北京时间工作日 9–12 点、14–18 点，其余时间半价；法定节假日全天也是半价，但这里识别不了节假日，那几天的估算会偏高。'),
+      reset,
+    );
+  }
+  return box;
+}
+
 // ---------- 划词 & 段落 ----------
 
 function renderBehavior() {
@@ -233,6 +294,7 @@ function renderBehavior() {
   makeSeg($('triggerMode'), S.triggerMode, (v) => save({ triggerMode: v }));
   makeSwitch($('showSentence'), S.showSentence, (v) => save({ showSentence: v }));
   makeSwitch($('autoCambridge'), S.autoCambridge, (v) => save({ autoCambridge: v }));
+  makeSwitch($('wordOnly'), S.wordOnly, (v) => save({ wordOnly: v }));
   makeSwitch($('paraEnabled'), S.paraEnabled, (v) => save({ paraEnabled: v }));
   makeSeg($('paraFont'), String(S.paraFont), (v) => { save({ paraFont: Number(v) }); renderStyles(); });
   renderStyles();
@@ -278,14 +340,16 @@ function renderUsage() {
   const days = daysBack(range);
   const sum = days.reduce((a, d) => {
     for (const k of ['calls', 'i', 'o', 'c', 'ms', 'hits', 'err']) a[k] += d[k] || 0;
+    for (const [c, v] of Object.entries(d.cost || {})) a.cost[c] = (a.cost[c] || 0) + v;
     return a;
-  }, { calls: 0, i: 0, o: 0, c: 0, ms: 0, hits: 0, err: 0 });
+  }, { calls: 0, i: 0, o: 0, c: 0, ms: 0, hits: 0, err: 0, cost: {} });
 
   const tiles = [
     ['调用次数', String(sum.calls)],
     ['输入 tokens', glossFmtTokens(sum.i)],
     ['输出 tokens', glossFmtTokens(sum.o)],
     ['平均耗时', sum.calls ? (sum.ms / sum.calls / 1000).toFixed(2) + ' s' : '—'],
+    ['估计成本', glossFmtCosts(sum.cost)],
     ['本地缓存命中', String(sum.hits)],
     ['失败次数', String(sum.err), sum.err > 0],
   ];
@@ -365,7 +429,7 @@ function drawChart(days) {
     const lines = [
       `调用 ${d.calls} 次${d.err ? ` · 失败 ${d.err}` : ''}`,
       `输入 ${d.i.toLocaleString()} · 输出 ${d.o.toLocaleString()}`,
-      d.calls ? `平均 ${(d.ms / d.calls / 1000).toFixed(2)} s` : '',
+      d.calls ? `平均 ${(d.ms / d.calls / 1000).toFixed(2)} s · 成本 ${glossFmtCosts(d.cost)}` : '',
     ];
     for (const l of lines) if (l) { tip.append(document.createElement('br'), l); }
     tip.hidden = false;
@@ -402,6 +466,7 @@ function renderRecent() {
       el('td', 'r', r.r ? r.r.toLocaleString() : '—'),
       el('td', 'r', r.f ? (r.f / 1000).toFixed(2) + ' s' : '—'),
       el('td', 'r', (r.ms / 1000).toFixed(2) + ' s'),
+      el('td', 'r', r.$ != null ? glossFmtMoney(r.$, r.cur) : '—'),
     );
     body.appendChild(tr);
   }

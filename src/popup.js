@@ -26,6 +26,7 @@ async function init() {
   makeSwitch($('direct'), s.triggerMode === 'direct', (v) => glossSave({ triggerMode: v ? 'direct' : 'icon' }));
   makeSwitch($('showSentence'), s.showSentence, (v) => glossSave({ showSentence: v }));
   makeSwitch($('autoCambridge'), s.autoCambridge, (v) => glossSave({ autoCambridge: v }));
+  makeSwitch($('wordOnly'), s.wordOnly, (v) => glossSave({ wordOnly: v }));
   makeSwitch($('paraEnabled'), s.paraEnabled, (v) => glossSave({ paraEnabled: v }));
   makeDropdown($('paraStyle'), {
     options: PARA_STYLES.map((p) => ({ value: p.id, label: p.name })),

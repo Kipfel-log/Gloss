@@ -26,7 +26,7 @@
           <h2>用量</h2>
           <div class="seg" id="range"><button data-v="7">7 天</button><button data-v="30">30 天</button><button data-v="90">90 天</button></div>
         </div>
-        <p class="lede">只统计 Gloss 发出的请求，token 数来自服务商的返回。实际费用以服务商控制台为准。</p>
+        <p class="lede">只统计 Gloss 发出的请求，token 数来自服务商的返回。成本按“模型服务”里每家填的价格估算，实际费用以服务商控制台为准。</p>
         <div class="tiles" id="tiles"></div>
         <div class="chart-card">
           <div class="legend">
@@ -39,7 +39,7 @@
         <h3>最近调用</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>时间</th><th>服务商 / 模型</th><th>类型</th><th class="r">输入</th><th class="r">输出</th><th class="r">思考</th><th class="r">首字</th><th class="r">总耗时</th></tr></thead>
+            <thead><tr><th>时间</th><th>服务商 / 模型</th><th>类型</th><th class="r">输入</th><th class="r">输出</th><th class="r">思考</th><th class="r">首字</th><th class="r">总耗时</th><th class="r">成本</th></tr></thead>
             <tbody id="recent"></tbody>
           </table>
           <p class="empty" id="recentEmpty">还没有调用记录。</p>
@@ -70,6 +70,10 @@
           <div class="item">
             <div class="t">显示整句翻译<small>关闭后点“显示整句翻译”才会去翻译，不点就不消耗额度。同一句里查多个词时，整句只翻译一次</small></div>
             <label class="sw"><input type="checkbox" id="showSentence"><span class="track"></span></label>
+          </div>
+          <div class="item">
+            <div class="t">只翻译单词和短语<small>开启后，框选整句或一大段文字时不会弹出（习惯性框选时不打扰）；段落翻译用 Shift</small></div>
+            <label class="sw"><input type="checkbox" id="wordOnly"><span class="track"></span></label>
           </div>
           <div class="item">
             <div class="t">查词时自动打开剑桥词典<small>在后台新标签页打开；关闭时可按 <kbd>Alt</kbd> + <kbd>C</kbd> 或点小窗按钮</small></div>
