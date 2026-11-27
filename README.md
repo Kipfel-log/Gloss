@@ -71,8 +71,10 @@ docs/                路线图、设计文档
 
 与 AI 协作开发：Claude 负责主体开发，GPT 负责代码审查（找 bug、安全隐患、更简洁的写法），审查意见交回 Claude 判断后修改。
 
-## 开源协议
+## 许可协议
 
-本项目以 [Apache License 2.0](LICENSE) 开源。
+本项目使用 [PolyForm Noncommercial License 1.0.0](LICENSE)：可以免费用于个人学习、研究等**非商业**用途，**不允许商用**。
 
 Copyright 2026 Kipfel-log
+
+> v1.11.3 及之前的版本按 Apache License 2.0 发布。
