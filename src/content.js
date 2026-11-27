@@ -11,7 +11,7 @@
   // 只读取界面相关的开关；API Key 只在后台读取
   const UI_DEFAULTS = {
     enabled: true, triggerMode: 'icon', showSentence: true, autoCambridge: false, wordOnly: false,
-    paraEnabled: true, paraStyle: 'muted', paraFont: 16,
+    paraEnabled: true, paraStyle: 'muted', paraFont: 16, paraMeta: 'hover',
   };
   const settings = { ...UI_DEFAULTS };
   chrome.storage.local.get(UI_DEFAULTS)
@@ -23,7 +23,7 @@
     for (const k of Object.keys(UI_DEFAULTS)) {
       if (changes[k]) {
         settings[k] = changes[k].newValue;
-        if (k === 'paraStyle' || k === 'paraFont') paraChanged = true;
+        if (k === 'paraStyle' || k === 'paraFont' || k === 'paraMeta') paraChanged = true;
       }
     }
     if (paraChanged) paraNodes.forEach(applyParaClass); // 已插入的译文实时换样式
@@ -118,6 +118,17 @@
   border: 0; background: transparent; padding: 0; color: var(--muted); font: 12px/1.4 var(--sans); cursor: default;
 }
 .g-status.has-think { cursor: pointer; }
+.meta {
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 11.5px; font-weight: 400; font-style: normal; line-height: 1.6; letter-spacing: normal;
+  text-align: right; opacity: .5; margin-top: .15em; transition: opacity .15s ease;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.meta:empty { display: none; }
+.meta-never .meta { display: none; }
+.meta-hover .meta { opacity: 0; }
+.meta-hover:hover .meta, .think-open .meta { opacity: .5; }
+.meta-never.think-open .meta { display: block; }
 .g-status.has-think:hover { color: var(--accent); }
 .g-think {
   margin: 2px 0 10px; padding: 8px 10px; background: var(--chip); border-radius: 8px;
@@ -538,6 +549,17 @@ ${THINK_TPL}
 }
 .think[hidden] { display: none; }
 .has-think { cursor: pointer; }
+.meta {
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 11.5px; font-weight: 400; font-style: normal; line-height: 1.6; letter-spacing: normal;
+  text-align: right; opacity: .5; margin-top: .15em; transition: opacity .15s ease;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.meta:empty { display: none; }
+.meta-never .meta { display: none; }
+.meta-hover .meta { opacity: 0; }
+.meta-hover:hover .meta, .think-open .meta { opacity: .5; }
+.meta-never.think-open .meta { display: block; }
 .err { color: #B4453A; font-size: .9em; }
 `;
 
@@ -617,13 +639,16 @@ ${THINK_TPL}
     think.hidden = true;
     const t = document.createElement('div');
     t.className = 't';
-    wrap.append(think, t);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    wrap.append(think, t, meta);
     // 翻译完成后，点一下译文可以展开 / 收起思考过程（拖动选字时不触发）
     wrap.addEventListener('click', () => {
       if (!wrap.classList.contains('has-think')) return;
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed) return;
       think.hidden = !think.hidden;
+      wrap.classList.toggle('think-open', !think.hidden);
     });
     shadow.append(style, wrap);
     node._wrap = wrap;
@@ -654,6 +679,11 @@ ${THINK_TPL}
       } else if (m.type === 'done') {
         t.textContent = t.textContent.trim();
         if (think.textContent) { wrap.classList.add('has-think'); wrap.title = '点击查看思考过程'; }
+        const short = (m.model || '').split('/').pop();
+        const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
+        meta.textContent = m.cached
+          ? `来自缓存 · ${short}`
+          : [m.provider, short, lv].filter(Boolean).join(' · ');
         try { p.disconnect(); } catch {}
       }
       else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; }
@@ -663,8 +693,8 @@ ${THINK_TPL}
 
   function applyParaClass(node) {
     if (!node._wrap) return;
-    const hadThink = node._wrap.classList.contains('has-think');
-    node._wrap.className = 'w ' + (settings.paraStyle || 'muted') + (hadThink ? ' has-think' : '');
+    const keep = ['has-think', 'think-open'].filter((c) => node._wrap.classList.contains(c));
+    node._wrap.className = ['w', settings.paraStyle || 'muted', 'meta-' + (settings.paraMeta || 'hover'), ...keep].join(' ');
     node._wrap.style.setProperty('--fs', (Number(settings.paraFont) || 16) + 'px'); // 固定字号，不跟着标题变大
   }
 

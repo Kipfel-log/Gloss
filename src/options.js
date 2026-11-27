@@ -389,6 +389,7 @@ function renderBehavior() {
   makeSwitch($('autoCambridge'), S.autoCambridge, (v) => save({ autoCambridge: v }));
   makeSwitch($('wordOnly'), S.wordOnly, (v) => save({ wordOnly: v }));
   makeSwitch($('paraEnabled'), S.paraEnabled, (v) => save({ paraEnabled: v }));
+  makeSeg($('paraMeta'), S.paraMeta, (v) => save({ paraMeta: v }));
   makeSeg($('paraFont'), String(S.paraFont), (v) => { save({ paraFont: Number(v) }); renderStyles(); });
   renderStyles();
 }
