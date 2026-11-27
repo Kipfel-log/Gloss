@@ -164,7 +164,7 @@ async function lookup(req, port, signal) {
     const cr = typeof cached === 'string' ? '' : cached.r || '';
     if (cr) safePost(port, { type: 'reason', text: cr });
     safePost(port, { type: 'delta', text: ct });
-    safePost(port, { type: 'done', cached: true, provider: a.name, model: a.model });
+    safePost(port, { type: 'done', cached: true, provider: a.name, model: a.model, alias: a.alias });
     recordUsage('hit', { t: Date.now() });
     return;
   }
@@ -258,7 +258,7 @@ async function lookup(req, port, signal) {
   }
 
   if (full) await cacheSet(cacheKey, reasoning ? { t: full, r: reasoning } : full);
-  safePost(port, { type: 'done', cached: false, provider: a.name, model: a.model, level });
+  safePost(port, { type: 'done', cached: false, provider: a.name, model: a.model, alias: a.alias, level });
 }
 
 chrome.runtime.onConnect.addListener((port) => {

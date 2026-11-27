@@ -91,7 +91,8 @@ function providerCard(id) {
   sum.tabIndex = 0;
   const title = el('div', 'pv-title');
   title.append(el('span', 'pv-name', P.name), el('span', 'pv-hint', P.hint));
-  const model = el('span', 'pv-chip mono', S.models[id] || '未设置模型');
+  const aliasNow = ((S.aliases || {})[glossProfileKey(id, S.models[id] || '')] || '').trim();
+  const model = el('span', 'pv-chip' + (aliasNow ? '' : ' mono'), aliasNow || S.models[id] || '未设置模型');
   model.title = S.models[id] || '';
   const keyChip = el('span', 'pv-chip');
   const paintKey = () => {
@@ -217,6 +218,24 @@ function providerCard(id) {
     mf.appendChild(custom);
   }
   conn.appendChild(mf);
+
+  // 显示名称（代称）：小窗和段落译文里用它代替“服务商 · 模型名”
+  const af = el('label', 'fl');
+  af.appendChild(el('span', null, '显示名称（可选）'));
+  const alias = el('input', 'input');
+  const aliasKey = glossProfileKey(id, S.models[id] || '');
+  alias.placeholder = '例如 “DS 快速”，留空则显示“服务商 · 模型名”';
+  alias.maxLength = 24;
+  alias.value = (S.aliases || {})[aliasKey] || '';
+  alias.addEventListener('input', debounce(() => {
+    save({ aliases: { ...(S.aliases || {}), [aliasKey]: alias.value.trim() } }).then(() => {
+      const v = alias.value.trim();
+      model.textContent = v || S.models[id] || '未设置模型';
+      model.classList.toggle('mono', !v);
+    });
+  }, 500));
+  af.append(alias, el('p', 'hint', '按模型分别保存，用在小窗右下角和段落译文的标注里。'));
+  conn.appendChild(af);
 
   const foot = el('div', 'pv-foot');
   const test = el('button', 'btn', '测试连接');

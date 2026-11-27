@@ -109,6 +109,7 @@
   border-top: 1px solid var(--line); font: 12px/1.4 var(--sans); color: var(--muted);
 }
 .g-cam {
+  flex-shrink: 0; white-space: nowrap;
   border: 1px solid var(--line); background: var(--surface); color: var(--text);
   font: 500 12px/1 var(--sans); padding: 6px 10px; border-radius: 8px; cursor: pointer;
 }
@@ -117,6 +118,8 @@
   margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   border: 0; background: transparent; padding: 0; color: var(--muted); font: 12px/1.4 var(--sans); cursor: default;
 }
+.g-status:focus { outline: none; }
+.g-status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .g-status.has-think { cursor: pointer; }
 .meta {
   font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -433,13 +436,14 @@ ${THINK_TPL}
     } else if (m.type === 'done') {
       current.done = true;
       render(true);
-      const short = (m.model || '').split('/').pop();
+      const name = m.alias || [m.provider, (m.model || '').split('/').pop()].filter(Boolean).join(' · ');
       const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
-      setStatus(m.cached ? '来自缓存' : (m.provider ? `${m.provider} · ${short}${lv ? ' · ' + lv : ''}` : ''));
+      setStatus(m.cached ? `来自缓存 · ${m.alias || (m.model || '').split('/').pop()}` : [name, lv].filter(Boolean).join(' · '));
+      q('.g-status').title = [m.provider, m.model].filter(Boolean).join(' · ');
       const st = q('.g-status');
       if (current.reason) {
         st.classList.add('has-think');
-        st.title = '点击查看思考过程';
+        st.title += '（点击查看思考过程）';
       }
       if (current.mode === 'word' && settings.autoCambridge) openCambridge(false);
     } else if (m.type === 'error') {
@@ -682,8 +686,8 @@ ${THINK_TPL}
         const short = (m.model || '').split('/').pop();
         const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
         meta.textContent = m.cached
-          ? `来自缓存 · ${short}`
-          : [m.provider, short, lv].filter(Boolean).join(' · ');
+          ? `来自缓存 · ${m.alias || short}`
+          : (m.alias ? [m.alias, lv] : [m.provider, short, lv]).filter(Boolean).join(' · ');
         try { p.disconnect(); } catch {}
       }
       else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; }
