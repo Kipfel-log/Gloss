@@ -230,6 +230,9 @@ async function lookup(req, port, signal) {
 // 调用一次模型：成功时边收边转发，返回 { ok: true, full, reasoning, level }；失败返回 { ok: false, status, body }
 async function callModel(a, req, port, signal, s, level) {
   const t0 = Date.now();
+  const P = PROVIDERS[a.id] || {};
+  // 扩散模型：每一块都是“当前完整文本”，前端整段替换，就能看到文字逐步变清晰
+  const diffusing = !!P.diffusion && (s.diffusing || {})[a.id] !== false;
   const thinkParams = glossThinkParams(a.id, level);
   if (level !== 'off') safePost(port, { type: 'thinking' });
   let resp;
@@ -243,8 +246,9 @@ async function callModel(a, req, port, signal, s, level) {
         messages: buildMessages(req),
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: (MAX_TOKENS[req.mode] || 1200) + (level !== 'off' ? THINK_EXTRA_TOKENS[level] || 0 : 0),
-        temperature: 0.3,
+        [P.tokenParam || 'max_tokens']: (MAX_TOKENS[req.mode] || 1200) + (level !== 'off' ? THINK_EXTRA_TOKENS[level] || 0 : 0),
+        temperature: Math.max(0.3, P.minTemp || 0),
+        ...(diffusing ? { diffusing: true } : {}),
         ...a.extra,
         ...thinkParams,
       }),
@@ -289,11 +293,21 @@ async function callModel(a, req, port, signal, s, level) {
           reasoning += rt;
           safePost(port, { type: 'reason', text: rt });
         }
+        const summary = json.reasoning_summary && json.reasoning_summary.content;
+        if (summary && !reasoning) {
+          reasoning = summary;
+          safePost(port, { type: 'reason', text: summary });
+        }
         const text = delta.content;
         if (text) {
           if (!firstMs) firstMs = Date.now() - t0;
-          full += text;
-          safePost(port, { type: 'delta', text });
+          if (diffusing) {
+            full = text;
+            safePost(port, { type: 'delta', text, replace: true });
+          } else {
+            full += text;
+            safePost(port, { type: 'delta', text });
+          }
         }
       }
     }
@@ -352,7 +366,7 @@ async function testConnection(providerId) {
       body: JSON.stringify({
         model: a.model,
         messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 1,
+        [(PROVIDERS[a.id] || {}).tokenParam || 'max_tokens']: 1,
         ...a.extra,
         ...glossThinkParams(a.id, 'off'),
       }),

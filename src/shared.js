@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.10.0';
+const GLOSS_VERSION = '1.11.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -36,6 +36,17 @@ const PROVIDERS = {
     extra: {},
     console: 'https://openrouter.ai/',
   },
+  inception: {
+    name: 'Inception',
+    hint: 'Mercury 扩散模型，可显示扩散过程',
+    baseUrl: 'https://api.inceptionlabs.ai/v1',
+    models: ['mercury-3', 'mercury-2.5'],
+    extra: {},
+    console: 'https://platform.inceptionlabs.ai/',
+    diffusion: true,                   // 支持 diffusing：每块返回“当前完整文本”
+    tokenParam: 'max_completion_tokens',
+    minTemp: 0.5,                      // 官方只接受 0.5–1
+  },
   custom: {
     name: '自定义',
     hint: '任意 OpenAI 兼容接口',
@@ -46,7 +57,7 @@ const PROVIDERS = {
   },
 };
 
-const PROVIDER_ORDER = ['deepseek', 'qwen', 'siliconflow', 'openrouter', 'custom'];
+const PROVIDER_ORDER = ['deepseek', 'qwen', 'siliconflow', 'openrouter', 'inception', 'custom'];
 
 const PARA_STYLES = [
   { id: 'plain', name: '普通', desc: '和原文一样' },
@@ -74,24 +85,27 @@ const PRICING_DEFAULTS = {
   qwen: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
   siliconflow: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
   openrouter: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
+  inception: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
   custom: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
 };
 
 const GLOSS_DEFAULTS = {
   provider: '',
   added: [], // 用户添加过的服务商；没添加的不显示
-  keys: { deepseek: '', qwen: '', siliconflow: '', openrouter: '', custom: '' },
+  keys: { deepseek: '', qwen: '', siliconflow: '', openrouter: '', inception: '', custom: '' },
   models: {
     deepseek: 'deepseek-flash',
     qwen: 'qwen3.8-flash',
     siliconflow: 'deepseek-ai/DeepSeek-V4-Flash',
     openrouter: 'baidu/ernie-5.5-flash-preview:free',
+    inception: 'mercury-3',
     custom: '',
   },
   pricing: PRICING_DEFAULTS,
   wordOnly: false,
   thinkProfiles: {},
-  thinking: { deepseek: 'off', qwen: 'off', siliconflow: 'off', openrouter: 'off', custom: 'off' },
+  thinking: { deepseek: 'off', qwen: 'off', siliconflow: 'off', openrouter: 'off', inception: 'off', custom: 'off' },
+  diffusing: {}, // 是否显示扩散过程，按服务商保存，默认开
   customBaseUrl: '',
   enabled: true,
   triggerMode: 'icon',
@@ -219,6 +233,9 @@ function glossThinkParams(id, level) {
     case 'qwen':
     case 'siliconflow':
       return on ? { enable_thinking: true, thinking_budget: THINK_BUDGET[level] } : { enable_thinking: false };
+    case 'inception':
+      // 默认是 medium，关闭要显式传 instant；思考时顺便要一份思考摘要（它不返回完整思维链）
+      return on ? { reasoning_effort: level, reasoning_summary: true } : { reasoning_effort: 'instant' };
     case 'openrouter':
       // 不设 exclude，让思考过程传回来，小窗里可以展示
       return { reasoning: on ? { effort: level } : { effort: 'none' } };

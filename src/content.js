@@ -392,7 +392,7 @@ ${THINK_TPL}
     let buf = '';
     my.onMessage.addListener((m) => {
       if (sentPort !== my || !popEl) return;
-      if (m.type === 'delta') { buf += m.text; fill('.g-sentence', buf.trim(), false); }
+      if (m.type === 'delta') { buf = m.replace ? m.text : buf + m.text; fill('.g-sentence', buf.trim(), false); }
       else if (m.type === 'done') { fill('.g-sentence', buf.trim(), true); try { my.disconnect(); } catch {} }
       else if (m.type === 'error') { fill('.g-sentence', m.message || '出错了。', true); }
     });
@@ -460,7 +460,7 @@ ${THINK_TPL}
         box.classList.remove('live');
         if (!current.thinkPinned) box.hidden = true;
       }
-      current.buffer += m.text;
+      current.buffer = m.replace ? m.text : current.buffer + m.text; // 扩散模型整段替换
       render(false);
     } else if (m.type === 'done') {
       current.done = true;
@@ -653,6 +653,7 @@ ${THINK_TPL}
 .quote { border-left: 3px solid var(--accent); padding-left: .8em; }
 .highlight { background: var(--tint); border-radius: 6px; padding: .45em .7em; }
 .t:empty::before { content: "翻译中…"; opacity: .45; }
+.t.diffusing { transition: opacity .12s ease; }
 .t[data-thinking]:empty::before { content: "思考中…"; }
 .think {
   font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -813,7 +814,7 @@ ${THINK_TPL}
         if (!t.textContent) { think.hidden = false; think.scrollTop = think.scrollHeight; }
       } else if (m.type === 'delta') {
         if (!t.textContent) think.hidden = true; // 开始输出译文：思考过程自动收起
-        t.textContent += m.text;
+        if (m.replace) t.textContent = m.text; else t.textContent += m.text;
       } else if (m.type === 'done') {
         t.textContent = t.textContent.trim();
         if (think.textContent) { wrap.classList.add('has-think'); wrap.title = '点击查看思考过程'; }

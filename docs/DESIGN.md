@@ -29,7 +29,10 @@ v0.2.0 起支持多家服务商（均为 OpenAI 兼容格式，地址与参数�
 | 千问（阿里云百炼，北京） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen3.8-flash` 等 | `"enable_thinking": false` |
 | 硅基流动 | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V4-Flash` | `"enable_thinking": false` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `baidu/ernie-5.5-flash-preview:free` 等免费模型 | `"reasoning": {"effort": "none"}` |
+| Inception | `https://api.inceptionlabs.ai/v1` | `mercury-3` | `"reasoning_effort": "instant"`（默认是 medium） |
 | 自定义 | 用户填写（保存时申请该网址权限） | 用户填写 | 无 |
+
+**扩散模型（Inception Mercury，v1.11.0）**：请求带 `diffusing: true` 时，流式每块的 `delta.content` 是当前完整文本（官方建议每步覆盖显示），后台以 `{ type: 'delta', replace: true }` 转发，前端整段替换。只接受温度 0.5–1，输出上限用 `max_completion_tokens`；不返回完整思维链，开启思考时请求 `reasoning_summary`，在最后一块里取摘要显示。
 
 **思考强度**：v1.3.0 起按“服务商 + 模型”分别保存，划词和整句/段落各一档，可选 关闭 / 低 / 中 / 高 / 自动（默认关闭）。“自动”按英文单词数匹配规则列表（v1.8.0 起）：从短到长依次匹配“不超过 N 词 → 某档”，都不满足时用“更长的”那一档；规则可加可删。划词数所在句子，整句/段落数要翻译的内容；默认 ≤15 关闭、≤40 低、≤100 中、更长用高。各档对应参数：
 

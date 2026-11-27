@@ -242,6 +242,17 @@ function providerCard(id) {
   af.append(alias, el('p', 'hint', '按模型分别保存，用在小窗右下角和段落译文的标注里。'));
   conn.appendChild(af);
 
+  if (P.diffusion) {
+    const row = el('div', 'price-row');
+    const sw = el('label', 'sw');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    sw.append(cb, el('span', 'track'));
+    makeSwitch(cb, (S.diffusing || {})[id] !== false, (v) => save({ diffusing: { ...(S.diffusing || {}), [id]: v } }));
+    row.append(el('span', null, '显示扩散过程（译文整段逐步变清晰，而不是一个字一个字出来）'), sw);
+    conn.appendChild(row);
+  }
+
   const foot = el('div', 'pv-foot');
   const test = el('button', 'btn', '测试连接');
   const status = el('span', 'status');
