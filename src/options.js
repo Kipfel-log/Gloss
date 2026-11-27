@@ -560,6 +560,23 @@ async function loadUsage() {
   renderUsage();
 }
 
+// 成本可能混着两种货币（中途切换过货币）：以当前服务商的货币为主，其余用小字附在下面
+function mainCur(costs) {
+  const cur = (S.pricing[S.provider] || {}).cur;
+  if (cur && costs[cur]) return cur;
+  const list = Object.entries(costs || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  return list.length ? list[0][0] : cur || 'CNY';
+}
+function costMain(costs) {
+  const c = mainCur(costs || {});
+  return glossFmtMoney((costs || {})[c] || 0, c);
+}
+function costRest(costs) {
+  const c = mainCur(costs || {});
+  const rest = Object.entries(costs || {}).filter(([k, v]) => k !== c && v > 0).map(([k, v]) => glossFmtMoney(v, k));
+  return rest.length ? `另有 ${rest.join(' + ')}（其他货币的记录）` : '';
+}
+
 function daysBack(n) {
   const out = [];
   for (let k = n - 1; k >= 0; k--) {
@@ -583,15 +600,16 @@ function renderUsage() {
     ['输入 tokens', glossFmtTokens(sum.i)],
     ['输出 tokens', glossFmtTokens(sum.o)],
     ['平均耗时', sum.calls ? (sum.ms / sum.calls / 1000).toFixed(2) + ' s' : '—'],
-    ['估计成本', glossFmtCosts(sum.cost)],
+    ['估计成本', costMain(sum.cost), false, costRest(sum.cost)],
     ['本地缓存命中', String(sum.hits)],
     ['失败次数', String(sum.err) + (sum.lim ? ` · 限流 ${sum.lim}` : ''), sum.err > 0],
   ];
   const tb = $('tiles');
   tb.textContent = '';
-  for (const [l, v, warn] of tiles) {
+  for (const [l, v, warn, sub] of tiles) {
     const t = el('div', 'tile' + (warn ? ' warn' : ''));
     t.append(el('div', 'v', v), el('div', 'l', l));
+    if (sub) t.appendChild(el('div', 'sub', sub));
     tb.appendChild(t);
   }
 
