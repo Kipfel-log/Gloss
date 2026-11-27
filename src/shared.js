@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.6.0';
+const GLOSS_VERSION = '1.7.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -93,6 +93,7 @@ const GLOSS_DEFAULTS = {
   paraFont: 16,
   paraMeta: 'hover',
   aliases: {}, // 模型显示名称，按“服务商|模型”保存
+  fallbacks: {}, // 限流后备：{ "服务商|模型": { on, to } }
 };
 
 async function glossLoad() {

@@ -79,6 +79,7 @@ async function removeProvider(id) {
 }
 
 const openCards = new Set(); // 当前展开的服务商（只记在页面里）
+const activeTab = {};         // 每家服务商当前停留的标签页
 
 function providerCard(id) {
   const P = PROVIDERS[id];
@@ -102,6 +103,10 @@ function providerCard(id) {
   };
   paintKey();
   sum.append(title, model, keyChip);
+  const fbNow = (S.fallbacks || {})[glossProfileKey(id, S.models[id] || '')];
+  if (fbNow && fbNow.on && fbNow.to && PROVIDERS[fbNow.to] && S.added.includes(fbNow.to)) {
+    sum.appendChild(el('span', 'pv-chip', '后备 → ' + PROVIDERS[fbNow.to].name));
+  }
   if (S.provider === id) {
     sum.appendChild(el('span', 'badge', '正在使用'));
   } else {
@@ -263,18 +268,87 @@ function providerCard(id) {
   links.appendChild(rm);
   conn.appendChild(links);
 
-  // 第二栏：思考强度；第三栏：价格
+  // 其余几块：思考强度、价格、限流后备
   const think = el('div', 'pv-col');
   think.appendChild(thinkBlock(id));
   const price = el('div', 'pv-col');
   price.appendChild(pricingBlock(id));
+  const fall = el('div', 'pv-col');
+  fall.appendChild(fallbackBlock(id));
 
-  body.append(conn, think, price);
+  // 标签页：一次只显示一块，以后选项再多也不会铺得很长
+  const panels = { conn, think, price, fall };
+  const tabs = el('div', 'pv-tabs');
+  for (const [k, label] of [['conn', '连接'], ['think', '思考强度'], ['price', '价格'], ['fall', '限流后备']]) {
+    const b = el('button', 'pv-tab', label);
+    b.type = 'button';
+    b.dataset.v = k;
+    tabs.appendChild(b);
+  }
+  const showTab = (k) => {
+    activeTab[id] = k;
+    for (const [pk, pe] of Object.entries(panels)) pe.hidden = pk !== k;
+    tabs.querySelectorAll('.pv-tab').forEach((b) => b.classList.toggle('on', b.dataset.v === k));
+  };
+  tabs.addEventListener('click', (e) => { const b = e.target.closest('.pv-tab'); if (b) showTab(b.dataset.v); });
+  body.append(tabs, conn, think, price, fall);
+  showTab(activeTab[id] || 'conn');
   card.appendChild(body);
   return card;
 }
 
 const THINK_CHOICES = [...THINK_LEVELS, { v: 'auto', l: '自动' }];
+
+function fallbackBlock(id) {
+  const model = S.models[id] || '';
+  const key = glossProfileKey(id, model);
+  const fb = { on: false, to: '', ...((S.fallbacks || {})[key] || {}) };
+  const others = S.added.filter((x) => x !== id);
+  const saveFb = () => save({ fallbacks: { ...(S.fallbacks || {}), [key]: { ...fb } } }).then(renderProviders);
+
+  const box = el('div', 'fall-block');
+  const head = el('div', 'think-head');
+  const tag = el('span', 'think-model', '按模型保存 · ' + (model || '未设置模型'));
+  tag.title = model;
+  head.append(el('h4', null, '限流后备'), tag);
+  box.appendChild(head);
+  box.appendChild(el('p', 'hint', '适合免费模型：遇到速率限制（429，比如免费额度当天用完）时，这一次请求自动改用后备服务商重试，划词小窗和段落译文里都会标出“已限流、改用了谁”。下一次请求还是先试这里。'));
+
+  if (!others.length) {
+    box.appendChild(el('p', 'empty-note', '先添加另一家服务商，才能把它设为后备。'));
+    return box;
+  }
+
+  const row = el('div', 'price-row');
+  const sw = el('label', 'sw');
+  const cb = el('input');
+  cb.type = 'checkbox';
+  sw.append(cb, el('span', 'track'));
+  makeSwitch(cb, fb.on, (v) => {
+    fb.on = v;
+    if (v && !others.includes(fb.to)) fb.to = others[0];
+    saveFb();
+  });
+  row.append(el('span', null, '限流时自动切换后备'), sw);
+  box.appendChild(row);
+
+  const f = el('div', 'fl');
+  f.appendChild(el('span', null, '后备服务商'));
+  const holder = el('div');
+  const aliasOf = (pid) => ((S.aliases || {})[glossProfileKey(pid, S.models[pid] || '')] || '').trim();
+  makeDropdown(holder, {
+    options: others.map((pid) => ({
+      value: pid,
+      label: PROVIDERS[pid].name,
+      sub: (aliasOf(pid) || S.models[pid] || '未设置模型') + (S.keys[pid] ? '' : ' · 未填 Key'),
+    })),
+    value: others.includes(fb.to) ? fb.to : others[0],
+    onChange: (v) => { fb.to = v; saveFb(); },
+  });
+  f.append(holder, el('p', 'hint', '后备服务商用它自己当前的模型、思考设置和价格。'));
+  box.appendChild(f);
+  return box;
+}
 
 function thinkBlock(id) {
   const model = S.models[id] || '';
@@ -452,10 +526,10 @@ function daysBack(n) {
 function renderUsage() {
   const days = daysBack(range);
   const sum = days.reduce((a, d) => {
-    for (const k of ['calls', 'i', 'o', 'c', 'ms', 'hits', 'err']) a[k] += d[k] || 0;
+    for (const k of ['calls', 'i', 'o', 'c', 'ms', 'hits', 'err', 'lim']) a[k] += d[k] || 0;
     for (const [c, v] of Object.entries(d.cost || {})) a.cost[c] = (a.cost[c] || 0) + v;
     return a;
-  }, { calls: 0, i: 0, o: 0, c: 0, ms: 0, hits: 0, err: 0, cost: {} });
+  }, { calls: 0, i: 0, o: 0, c: 0, ms: 0, hits: 0, err: 0, lim: 0, cost: {} });
 
   const tiles = [
     ['调用次数', String(sum.calls)],
@@ -464,7 +538,7 @@ function renderUsage() {
     ['平均耗时', sum.calls ? (sum.ms / sum.calls / 1000).toFixed(2) + ' s' : '—'],
     ['估计成本', glossFmtCosts(sum.cost)],
     ['本地缓存命中', String(sum.hits)],
-    ['失败次数', String(sum.err), sum.err > 0],
+    ['失败次数', String(sum.err) + (sum.lim ? ` · 限流 ${sum.lim}` : ''), sum.err > 0],
   ];
   const tb = $('tiles');
   tb.textContent = '';

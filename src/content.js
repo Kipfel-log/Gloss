@@ -120,6 +120,7 @@
 }
 .g-status:focus { outline: none; }
 .g-status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.g-status.warn { color: var(--accent); }
 .g-status.has-think { cursor: pointer; }
 .meta {
   font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -132,6 +133,7 @@
 .meta-hover .meta { opacity: 0; }
 .meta-hover:hover .meta, .think-open .meta { opacity: .5; }
 .meta-never.think-open .meta { display: block; }
+.fb .meta { display: block !important; opacity: .9 !important; color: var(--accent); }
 .g-status.has-think:hover { color: var(--accent); }
 .g-think {
   margin: 2px 0 10px; padding: 8px 10px; background: var(--chip); border-radius: 8px;
@@ -411,8 +413,11 @@ ${THINK_TPL}
 
   function onMessage(m) {
     if (!current || !popEl) return;
-    if (m.type === 'thinking') {
-      setStatus('思考中…');
+    if (m.type === 'fallback') {
+      setStatus(`${m.from} 限流，改用 ${m.to}…`);
+      q('.g-status').classList.add('warn');
+    } else if (m.type === 'thinking') {
+      if (!q('.g-status').classList.contains('warn')) setStatus('思考中…');
     } else if (m.type === 'reason') {
       current.reason += m.text;
       const box = q('.g-think');
@@ -425,7 +430,7 @@ ${THINK_TPL}
       }
     } else if (m.type === 'delta') {
       if (!current.buffer) {
-        setStatus('');
+        if (!q('.g-status').classList.contains('warn')) setStatus('');
         // 开始输出正文：思考过程自动收起
         const box = q('.g-think');
         box.classList.remove('live');
@@ -438,7 +443,9 @@ ${THINK_TPL}
       render(true);
       const name = m.alias || [m.provider, (m.model || '').split('/').pop()].filter(Boolean).join(' · ');
       const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
-      setStatus(m.cached ? `来自缓存 · ${m.alias || (m.model || '').split('/').pop()}` : [name, lv].filter(Boolean).join(' · '));
+      const label = m.cached ? `来自缓存 · ${m.alias || (m.model || '').split('/').pop()}` : [name, lv].filter(Boolean).join(' · ');
+      setStatus(m.fallbackFrom ? `${m.fallbackFrom} 限流 → ${label}` : label);
+      q('.g-status').classList.toggle('warn', !!m.fallbackFrom);
       q('.g-status').title = [m.provider, m.model].filter(Boolean).join(' · ');
       const st = q('.g-status');
       if (current.reason) {
@@ -564,6 +571,7 @@ ${THINK_TPL}
 .meta-hover .meta { opacity: 0; }
 .meta-hover:hover .meta, .think-open .meta { opacity: .5; }
 .meta-never.think-open .meta { display: block; }
+.fb .meta { display: block !important; opacity: .9 !important; color: var(--accent); }
 .err { color: #B4453A; font-size: .9em; }
 `;
 
@@ -673,7 +681,10 @@ ${THINK_TPL}
     }
     node._port = p;
     p.onMessage.addListener((m) => {
-      if (m.type === 'thinking') t.dataset.thinking = '1';
+      if (m.type === 'fallback') {
+        wrap.classList.add('fb');
+        meta.textContent = `${m.from} 限流，改用 ${m.to}…`;
+      } else if (m.type === 'thinking') t.dataset.thinking = '1';
       else if (m.type === 'reason') {
         think.textContent += m.text;
         if (!t.textContent) { think.hidden = false; think.scrollTop = think.scrollHeight; }
@@ -685,19 +696,20 @@ ${THINK_TPL}
         if (think.textContent) { wrap.classList.add('has-think'); wrap.title = '点击查看思考过程'; }
         const short = (m.model || '').split('/').pop();
         const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
-        meta.textContent = m.cached
+        const label = m.cached
           ? `来自缓存 · ${m.alias || short}`
           : (m.alias ? [m.alias, lv] : [m.provider, short, lv]).filter(Boolean).join(' · ');
+        meta.textContent = m.fallbackFrom ? `${m.fallbackFrom} 限流 → ${label}` : label;
         try { p.disconnect(); } catch {}
       }
-      else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; }
+      else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; think.hidden = true; }
     });
     p.postMessage({ mode: 'paragraph', selection: text, prev, title: document.title.slice(0, 200) });
   }
 
   function applyParaClass(node) {
     if (!node._wrap) return;
-    const keep = ['has-think', 'think-open'].filter((c) => node._wrap.classList.contains(c));
+    const keep = ['has-think', 'think-open', 'fb'].filter((c) => node._wrap.classList.contains(c));
     node._wrap.className = ['w', settings.paraStyle || 'muted', 'meta-' + (settings.paraMeta || 'hover'), ...keep].join(' ');
     node._wrap.style.setProperty('--fs', (Number(settings.paraFont) || 16) + 'px'); // 固定字号，不跟着标题变大
   }

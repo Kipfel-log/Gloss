@@ -199,3 +199,20 @@ td .m { display: inline-block; max-width: 230px; overflow: hidden; text-overflow
 .pv-col .think-row .seg { flex-shrink: 0; }
 .pv-col .think-row .seg button { padding: 5px 8px; }
 .pv-col .auto-line .input { width: 58px; padding: 5px 4px; }
+
+/* ---------- 服务商展开后的标签页（v1.7） ---------- */
+.pv-body { display: block; }
+.pv-tabs { display: flex; gap: 2px; padding: 8px 14px 0; border-bottom: 1px solid var(--line); }
+.pv-tab {
+  border: 0; background: transparent; cursor: pointer; padding: 9px 12px 10px; font: 500 13.5px/1 var(--sans);
+  color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.pv-tab:hover { color: var(--text); }
+.pv-tab.on { color: var(--text); border-bottom-color: var(--accent); }
+.pv-body > .pv-col { border-left: 0 !important; border-top: 0 !important; padding: 18px 22px 20px; max-width: 760px; }
+.pv-body > .pv-col[hidden] { display: none; }
+.pv-body > .pv-col > h4, .pv-body .think-head h4, .pv-body .price > h4 { display: none; }
+.pv-body .think-head { justify-content: flex-end; }
+.fall-block { display: flex; flex-direction: column; gap: 12px; }
+.fall-block .dd { max-width: 360px; }
+.pv-col .pv-links { margin-top: 4px; }

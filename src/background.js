@@ -49,7 +49,7 @@ function errorMessage(status, bodyText, providerName) {
   switch (status) {
     case 401: return `API Key 无效（401），请到设置里检查 ${providerName} 的 Key。`;
     case 402: return `账户余额不足（402），请到 ${providerName} 平台充值。`;
-    case 429: return '请求太频繁（429），稍等一下再试。';
+    case 429: return `${providerName} 触发速率限制（429）：请求太频繁，或免费额度用完了。稍后再试，或在设置里给它开“限流时切换后备”。`;
     case 500:
     case 503: return `${providerName} 服务器繁忙（${status}），稍后再试。`;
     default: {
@@ -130,6 +130,7 @@ function recordUsage(kind, entry, pricing) {
       day.hits += 1;
     } else if (kind === 'error') {
       day.err += 1;
+      if (entry.limited) day.lim = (day.lim || 0) + 1;
     }
     usageDaily[key] = day;
     const cutoff = glossDayKey(Date.now() - 180 * 864e5);
@@ -140,35 +141,76 @@ function recordUsage(kind, entry, pricing) {
 
 // ---------- 查询（流式） ----------
 
+function checkReady(a) {
+  if (!a) return '还没有添加模型服务。';
+  if (!a.key) return `还没有填写 ${a.name} 的 API Key。`;
+  if (!a.baseUrl || !a.model) return '接口地址或模型名还没填好。';
+  return '';
+}
+
+function displayName(a) {
+  return a.alias || `${a.name} · ${(a.model || '').split('/').pop()}`;
+}
+
 async function lookup(req, port, signal) {
   const s = await glossLoad();
-  const a = glossActive(s);
-  if (!a) {
-    safePost(port, { type: 'error', code: 'no-key', message: '还没有添加模型服务。' });
-    return;
-  }
-  if (!a.key) {
-    safePost(port, { type: 'error', code: 'no-key', message: `还没有填写 ${a.name} 的 API Key。` });
-    return;
-  }
-  if (!a.baseUrl || !a.model) {
-    safePost(port, { type: 'error', code: 'no-key', message: '接口地址或模型名还没填好。' });
+  const prim = glossActive(s);
+  const notReady = checkReady(prim);
+  if (notReady) {
+    safePost(port, { type: 'error', code: 'no-key', message: notReady });
     return;
   }
 
-  const cacheKey = 'c_' + (await sha256(JSON.stringify([req.mode, a.id, a.model, req.selection, req.sentence || '', req.prev || ''])));
+  // 缓存键用主服务商：就算这次是后备答的，下次同样的内容也直接命中
+  const cacheKey = 'c_' + (await sha256(JSON.stringify([req.mode, prim.id, prim.model, req.selection, req.sentence || '', req.prev || ''])));
   const cached = (await chrome.storage.session.get(cacheKey))[cacheKey];
   if (cached) {
-    // 旧版缓存是纯文本，新版是 { t: 译文, r: 思考过程 }
+    // 旧版缓存是纯文本，新版是 { t: 译文, r: 思考过程, fb: 后备信息 }
     const ct = typeof cached === 'string' ? cached : cached.t;
     const cr = typeof cached === 'string' ? '' : cached.r || '';
     if (cr) safePost(port, { type: 'reason', text: cr });
     safePost(port, { type: 'delta', text: ct });
-    safePost(port, { type: 'done', cached: true, provider: a.name, model: a.model, alias: a.alias });
+    safePost(port, { type: 'done', cached: true, provider: prim.name, model: prim.model, alias: prim.alias });
     recordUsage('hit', { t: Date.now() });
     return;
   }
 
+  // 先用主服务商；限流（429）且开了后备时，换后备服务商重试一次
+  let a = prim;
+  let fallbackFrom = null;
+  while (true) {
+    const r = await callModel(a, req, port, signal, s);
+    if (r.ok) {
+      if (r.full) {
+        const val = r.reasoning || fallbackFrom ? { t: r.full, r: r.reasoning } : r.full;
+        await cacheSet(cacheKey, val);
+      }
+      safePost(port, {
+        type: 'done', cached: false, provider: a.name, model: a.model, alias: a.alias, level: r.level,
+        fallbackFrom,
+      });
+      return;
+    }
+    const fb = (s.fallbacks || {})[glossProfileKey(prim.id, prim.model)];
+    const target = fb && fb.on && fb.to && fb.to !== prim.id && (s.added || []).includes(fb.to)
+      ? glossActive({ ...s, provider: fb.to }) : null;
+    if (r.status === 429 && !fallbackFrom && target && !checkReady(target)) {
+      fallbackFrom = displayName(prim);
+      safePost(port, { type: 'fallback', from: fallbackFrom, to: displayName(target) });
+      a = target;
+      continue;
+    }
+    safePost(port, {
+      type: 'error',
+      rateLimited: r.status === 429,
+      message: errorMessage(r.status, r.body, a.name) + (fallbackFrom ? `（已从 ${fallbackFrom} 切换过来）` : ''),
+    });
+    return;
+  }
+}
+
+// 调用一次模型：成功时边收边转发，返回 { ok: true, full, reasoning, level }；失败返回 { ok: false, status, body }
+async function callModel(a, req, port, signal, s) {
   const t0 = Date.now();
   const level = glossPickLevel(a.profile, req.mode, req);
   const thinkParams = glossThinkParams(a.id, level);
@@ -197,9 +239,8 @@ async function lookup(req, port, signal) {
 
   if (!resp.ok) {
     const body = await resp.text().catch(() => '');
-    recordUsage('error', { t: Date.now() });
-    safePost(port, { type: 'error', message: errorMessage(resp.status, body, a.name) });
-    return;
+    recordUsage('error', { t: Date.now(), limited: resp.status === 429 });
+    return { ok: false, status: resp.status, body };
   }
 
   const reader = resp.body.getReader();
@@ -257,8 +298,7 @@ async function lookup(req, port, signal) {
     }, s.pricing[a.id]);
   }
 
-  if (full) await cacheSet(cacheKey, reasoning ? { t: full, r: reasoning } : full);
-  safePost(port, { type: 'done', cached: false, provider: a.name, model: a.model, alias: a.alias, level });
+  return { ok: true, full, reasoning, level };
 }
 
 chrome.runtime.onConnect.addListener((port) => {
