@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gloss",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "结合上下文的划词翻译与段落翻译，调用你自己的大模型 API。",
   "permissions": [
     "storage"
@@ -32,6 +32,18 @@
   "options_page": "src/options.html",
   "action": {
     "default_title": "Gloss",
-    "default_popup": "src/popup.html"
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }

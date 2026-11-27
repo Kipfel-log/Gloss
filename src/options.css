@@ -119,3 +119,5 @@ td .m { color: var(--muted); font-size: 12px; }
 .providers:empty { display: none; }
 .pv .hint { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
 .pv .seg { align-self: flex-start; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand img { width: 38px; height: 38px; }
