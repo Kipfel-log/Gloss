@@ -602,7 +602,7 @@ function renderUsage() {
     ['平均耗时', sum.calls ? (sum.ms / sum.calls / 1000).toFixed(2) + ' s' : '—'],
     ['估计成本', costMain(sum.cost), false, costRest(sum.cost)],
     ['本地缓存命中', String(sum.hits)],
-    ['失败次数', String(sum.err) + (sum.lim ? ` · 限流 ${sum.lim}` : ''), sum.err > 0],
+    ['失败次数', String(sum.err), sum.err > 0, sum.lim ? `其中限流 ${sum.lim} 次` : ''],
   ];
   const tb = $('tiles');
   tb.textContent = '';
