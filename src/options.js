@@ -154,6 +154,7 @@ function providerCard(id) {
   custom.placeholder = '模型名，例如 ' + (P.models[0] || 'gpt-4o-mini');
   const saveModel = debounce(() => save({ models: { ...S.models, [id]: custom.value.trim() } }), 500);
   custom.addEventListener('input', saveModel);
+  custom.addEventListener('change', () => setTimeout(renderProviders, 600));
 
   if (P.models.length) {
     const cur = S.models[id];
@@ -172,7 +173,7 @@ function providerCard(id) {
           custom.focus();
         } else {
           custom.hidden = true;
-          save({ models: { ...S.models, [id]: v } });
+          save({ models: { ...S.models, [id]: v } }).then(renderProviders); // 换模型后显示该模型自己的思考方案
         }
       },
     });
@@ -185,19 +186,8 @@ function providerCard(id) {
   }
   card.appendChild(mf);
 
-  // 思考强度
-  const tf = el('div', 'fl');
-  tf.appendChild(el('span', null, '思考强度'));
-  const seg = el('div', 'seg');
-  for (const t of THINK_LEVELS) {
-    const b = el('button', null, t.l);
-    b.type = 'button';
-    b.dataset.v = t.v;
-    seg.appendChild(b);
-  }
-  makeSeg(seg, S.thinking[id] || 'off', (v) => save({ thinking: { ...S.thinking, [id]: v } }));
-  tf.append(seg, el('p', 'hint', '关闭最快、最省；开启后对难句更准，但会更慢，思考过程也按输出 token 计费。'));
-  card.appendChild(tf);
+  // 思考强度（按当前模型保存）
+  card.appendChild(thinkBlock(id));
 
   // 价格（用于成本估计）
   card.appendChild(pricingBlock(id));
@@ -227,6 +217,76 @@ function providerCard(id) {
   foot.appendChild(rm);
   card.appendChild(foot);
   return card;
+}
+
+const THINK_CHOICES = [...THINK_LEVELS, { v: 'auto', l: '自动' }];
+
+function thinkBlock(id) {
+  const model = S.models[id] || '';
+  const prof = glossThinkProfile(S, id, model);
+  const saveProf = () => {
+    const key = glossProfileKey(id, model);
+    save({ thinkProfiles: { ...S.thinkProfiles, [key]: { ...prof } } });
+  };
+
+  const box = el('div', 'fl think-block');
+  const head = el('div', 'think-head');
+  const tag = el('span', 'think-model', '按模型保存 · ' + (model || '未设置模型'));
+  tag.title = model;
+  head.append(el('span', null, '思考强度'), tag);
+  box.appendChild(head);
+
+  const autoBox = el('div', 'auto-box');
+  const syncAuto = () => { autoBox.hidden = !(prof.word === 'auto' || prof.para === 'auto'); };
+
+  const row = (label, field) => {
+    const r = el('div', 'think-row');
+    r.appendChild(el('span', 'think-lab', label));
+    const seg = el('div', 'seg');
+    for (const t of THINK_CHOICES) {
+      const b = el('button', null, t.l);
+      b.type = 'button';
+      b.dataset.v = t.v;
+      seg.appendChild(b);
+    }
+    makeSeg(seg, prof[field], (v) => { prof[field] = v; saveProf(); syncAuto(); });
+    r.appendChild(seg);
+    return r;
+  };
+
+  const line = el('div', 'auto-line');
+  const num = (field) => {
+    const inp = el('input', 'input mono');
+    inp.type = 'number';
+    inp.min = '1';
+    inp.value = prof[field];
+    inp.addEventListener('input', debounce(() => {
+      const v = Math.max(1, Math.round(Number(inp.value) || 1));
+      prof[field] = v;
+      saveProf();
+    }, 500));
+    return inp;
+  };
+  line.append(
+    el('span', 'lv off', '关闭'), el('span', null, '≤'), num('t1'), el('span', null, '词 <'),
+    el('span', 'lv', '低'), el('span', null, '≤'), num('t2'), el('span', null, '词 <'),
+    el('span', 'lv', '中'), el('span', null, '≤'), num('t3'), el('span', null, '词 <'),
+    el('span', 'lv', '高'),
+  );
+  autoBox.append(
+    el('div', 'auto-title', '自动档位（按英文单词数）'),
+    line,
+    el('p', 'hint', '划词按所在句子的单词数，整句 / 段落按要翻译的内容本身。'),
+  );
+  syncAuto();
+
+  box.append(
+    row('划词', 'word'),
+    row('整句 / 段落', 'para'),
+    autoBox,
+    el('p', 'hint', '关闭最快、最省；开启后对难句更准，但会更慢，思考过程也按输出 token 计费。换模型后会切换到那个模型自己的方案。'),
+  );
+  return box;
 }
 
 function pricingBlock(id) {
@@ -445,6 +505,13 @@ function drawChart(days) {
 }
 
 const KIND = { word: '划词', sentence: '句子', paragraph: '段落' };
+const LEVEL_LABEL = { low: '低', medium: '中', high: '高' };
+
+function thinkCell(r) {
+  const lv = LEVEL_LABEL[r.tl];
+  if (!lv) return r.r ? r.r.toLocaleString() : '—';
+  return `${lv}${r.r ? ' · ' + r.r.toLocaleString() : ''}`;
+}
 
 let recentOpen = false;
 
@@ -470,7 +537,7 @@ function renderRecent() {
       el('td', null, KIND[r.k] || r.k),
       el('td', 'r', r.nu ? '—' : r.i.toLocaleString()),
       el('td', 'r', r.nu ? '—' : r.o.toLocaleString()),
-      el('td', 'r', r.r ? r.r.toLocaleString() : '—'),
+      el('td', 'r', thinkCell(r)),
       el('td', 'r', r.f ? (r.f / 1000).toFixed(2) + ' s' : '—'),
       el('td', 'r', (r.ms / 1000).toFixed(2) + ' s'),
       el('td', 'r', r.$ != null ? glossFmtMoney(r.$, r.cur) : '—'),

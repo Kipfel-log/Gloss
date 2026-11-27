@@ -138,3 +138,16 @@ td .m { display: inline-block; max-width: 230px; overflow: hidden; text-overflow
 .more-row .btn { font-size: 12.5px; padding: 6px 12px; }
 .usage-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .more-row[hidden] { display: none; }
+
+.think-block { gap: 8px; }
+.think-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.think-head > span:first-child { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.think-model { font: 11px/1.4 var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62%; }
+.think-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.think-lab { font-size: 13px; }
+.auto-box { background: var(--sunk); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.auto-box[hidden] { display: none; }
+.auto-title { font-size: 12px; font-weight: 600; color: var(--muted); }
+.auto-line { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.auto-line .input { width: 58px; padding: 5px 7px; text-align: center; }
+.auto-line .lv { color: var(--text); font-weight: 600; }

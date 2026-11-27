@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.2.0';
+const GLOSS_VERSION = '1.3.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -81,6 +81,7 @@ const GLOSS_DEFAULTS = {
   },
   pricing: PRICING_DEFAULTS,
   wordOnly: false,
+  thinkProfiles: {},
   thinking: { deepseek: 'off', qwen: 'off', siliconflow: 'off', openrouter: 'off', custom: 'off' },
   customBaseUrl: '',
   enabled: true,
@@ -123,9 +124,40 @@ function glossActive(s) {
     baseUrl: (s.provider === 'custom' ? s.customBaseUrl : p.baseUrl).replace(/\/+$/, ''),
     key: s.keys[s.provider] || '',
     model: s.models[s.provider] || '',
-    think: s.thinking[s.provider] || 'off',
-    extra: { ...p.extra, ...glossThinkParams(s.provider, s.thinking[s.provider]) },
+    extra: p.extra,
+    profile: glossThinkProfile(s, s.provider, s.models[s.provider] || ''),
   };
+}
+
+// ---------- 思考方案（按“服务商 + 模型”分别保存） ----------
+// word：划词用的档位；para：整句 / 段落翻译用的档位；可选 off / low / medium / high / auto。
+// auto 按英文单词数分档：≤ t1 关闭，≤ t2 低，≤ t3 中，更长用高。
+// 划词时数的是“所在句子”的单词数（句子越长越绕），整句 / 段落数的是要翻译的文字本身。
+
+const THINK_DEFAULT_PROFILE = { word: 'off', para: 'off', t1: 15, t2: 40, t3: 100 };
+
+function glossProfileKey(id, model) {
+  return `${id}|${model}`;
+}
+
+function glossThinkProfile(s, id, model) {
+  const legacy = (s.thinking || {})[id];
+  const base = legacy && legacy !== 'off' ? { word: legacy, para: legacy } : {};
+  return { ...THINK_DEFAULT_PROFILE, ...base, ...((s.thinkProfiles || {})[glossProfileKey(id, model)] || {}) };
+}
+
+function glossWordCount(text) {
+  return ((text || '').match(/[A-Za-z][A-Za-z'’-]*/g) || []).length;
+}
+
+function glossPickLevel(profile, mode, req) {
+  const set = mode === 'word' ? profile.word : profile.para;
+  if (set !== 'auto') return set || 'off';
+  const n = glossWordCount(mode === 'word' ? req.sentence || req.selection : req.selection);
+  if (n <= profile.t1) return 'off';
+  if (n <= profile.t2) return 'low';
+  if (n <= profile.t3) return 'medium';
+  return 'high';
 }
 
 // ---------- 思考强度 ----------

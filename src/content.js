@@ -119,8 +119,6 @@
 }
 .g-status.has-think { cursor: pointer; }
 .g-status.has-think:hover { color: var(--accent); }
-.g-status.has-think::after { content: " ▾"; font-size: 10px; }
-.g-status.has-think.open::after { content: " ▴"; }
 .g-think {
   margin: 2px 0 10px; padding: 8px 10px; background: var(--chip); border-radius: 8px;
   max-height: 168px; overflow: auto; overscroll-behavior: contain;
@@ -425,7 +423,8 @@ ${THINK_TPL}
       current.done = true;
       render(true);
       const short = (m.model || '').split('/').pop();
-      setStatus(m.cached ? '来自缓存' : (m.provider ? `${m.provider} · ${short}` : ''));
+      const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
+      setStatus(m.cached ? '来自缓存' : (m.provider ? `${m.provider} · ${short}${lv ? ' · ' + lv : ''}` : ''));
       const st = q('.g-status');
       if (current.reason) {
         st.classList.add('has-think');

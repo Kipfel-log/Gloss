@@ -170,7 +170,9 @@ async function lookup(req, port, signal) {
   }
 
   const t0 = Date.now();
-  if (a.think !== 'off') safePost(port, { type: 'thinking' });
+  const level = glossPickLevel(a.profile, req.mode, req);
+  const thinkParams = glossThinkParams(a.id, level);
+  if (level !== 'off') safePost(port, { type: 'thinking' });
   let resp;
   try {
     resp = await fetch(a.baseUrl + '/chat/completions', {
@@ -182,9 +184,10 @@ async function lookup(req, port, signal) {
         messages: buildMessages(req),
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: (MAX_TOKENS[req.mode] || 1200) + (a.think !== 'off' ? THINK_EXTRA_TOKENS[a.think] || 0 : 0),
+        max_tokens: (MAX_TOKENS[req.mode] || 1200) + (level !== 'off' ? THINK_EXTRA_TOKENS[level] || 0 : 0),
         temperature: 0.3,
         ...a.extra,
+        ...thinkParams,
       }),
     });
   } catch (e) {
@@ -250,11 +253,12 @@ async function lookup(req, port, signal) {
       ms: Date.now() - t0,
       f: firstMs,
       nu: usage ? 0 : 1, // 1 = 服务商没有返回用量（多半是中途取消）
+      tl: level, // 这次实际用的思考档位
     }, s.pricing[a.id]);
   }
 
   if (full) await cacheSet(cacheKey, reasoning ? { t: full, r: reasoning } : full);
-  safePost(port, { type: 'done', cached: false, provider: a.name, model: a.model });
+  safePost(port, { type: 'done', cached: false, provider: a.name, model: a.model, level });
 }
 
 chrome.runtime.onConnect.addListener((port) => {
@@ -291,11 +295,12 @@ async function testConnection(providerId) {
       body: JSON.stringify({
         model: a.model,
         messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: a.think !== 'off' ? 64 : 1,
+        max_tokens: 1,
         ...a.extra,
+        ...glossThinkParams(a.id, 'off'),
       }),
     });
-    if (resp.ok) return { ok: true, message: `连接成功 · ${a.model} · ${Date.now() - t0} ms${a.think !== 'off' ? ' · 思考已开启' : ''}` };
+    if (resp.ok) return { ok: true, message: `连接成功 · ${a.model} · ${Date.now() - t0} ms` };
     return { ok: false, message: errorMessage(resp.status, await resp.text().catch(() => ''), a.name) };
   } catch (e) {
     return { ok: false, message: netError(e) };
