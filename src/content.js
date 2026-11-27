@@ -277,9 +277,17 @@ ${THINK_TPL}
       ...ctx,
       rect: { left: r.left + scrollX, right: r.right + scrollX, top: r.top + scrollY, bottom: r.bottom + scrollY },
     };
-    if (settings.triggerMode === 'direct') openPopup(payload);
-    else showIcon(e.pageX + 8, e.pageY + 10, payload);
+    if (settings.triggerMode === 'direct') {
+      // 防抖：双击选中单词后紧接着第三下点击（选整段）时，不先发一次单词请求
+      clearTimeout(directTimer);
+      directTimer = setTimeout(() => openPopup(payload), DIRECT_DELAY);
+    } else {
+      showIcon(e.pageX + 8, e.pageY + 10, payload);
+    }
   }
+
+  const DIRECT_DELAY = 300;
+  let directTimer = 0;
 
   document.addEventListener('mouseup', (e) => {
     if (e.button !== 0 || inHost(e)) return;
@@ -288,6 +296,7 @@ ${THINK_TPL}
 
   document.addEventListener('mousedown', (e) => {
     if (inHost(e)) return;
+    clearTimeout(directTimer); // 300 ms 内又按下鼠标：取消上一次待发的请求
     hideIcon();
     closePopup();
   }, true);
