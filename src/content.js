@@ -443,7 +443,9 @@ ${THINK_TPL}
       render(true);
       const name = m.alias || [m.provider, (m.model || '').split('/').pop()].filter(Boolean).join(' · ');
       const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
-      const label = m.cached ? `来自缓存 · ${m.alias || (m.model || '').split('/').pop()}` : [name, lv].filter(Boolean).join(' · ');
+      const label = m.cached
+        ? `来自缓存 · ${m.alias || (m.model || '').split('/').pop()}${m.viaFallback ? '（后备）' : ''}`
+        : [name, lv].filter(Boolean).join(' · ');
       if (m.fallbackFrom) {
         // 限流提示显示 3 秒，然后换回正常的“模型 · 档位”
         setStatus(`${m.fallbackFrom} 限流 → 已改用 ${m.alias || m.provider}`);
@@ -709,7 +711,7 @@ ${THINK_TPL}
         const short = (m.model || '').split('/').pop();
         const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
         const label = m.cached
-          ? `来自缓存 · ${m.alias || short}`
+          ? `来自缓存 · ${m.alias || short}${m.viaFallback ? '（后备）' : ''}`
           : (m.alias ? [m.alias, lv] : [m.provider, short, lv]).filter(Boolean).join(' · ');
         if (m.fallbackFrom) {
           meta.textContent = `${m.fallbackFrom} 限流 → 已改用 ${m.alias || m.provider}`;

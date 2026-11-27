@@ -165,12 +165,16 @@ async function lookup(req, port, signal) {
   const cacheKey = 'c_' + (await sha256(JSON.stringify([req.mode, prim.id, prim.model, req.selection, req.sentence || '', req.prev || ''])));
   const cached = (await chrome.storage.session.get(cacheKey))[cacheKey];
   if (cached) {
-    // 旧版缓存是纯文本，新版是 { t: 译文, r: 思考过程, fb: 后备信息 }
+    // 旧版缓存是纯文本；新版是 { t: 译文, r: 思考过程, by: 实际回答的模型 }
     const ct = typeof cached === 'string' ? cached : cached.t;
     const cr = typeof cached === 'string' ? '' : cached.r || '';
+    const by = (typeof cached === 'object' && cached.by) || { name: prim.name, model: prim.model, alias: prim.alias };
     if (cr) safePost(port, { type: 'reason', text: cr });
     safePost(port, { type: 'delta', text: ct });
-    safePost(port, { type: 'done', cached: true, provider: prim.name, model: prim.model, alias: prim.alias });
+    safePost(port, {
+      type: 'done', cached: true, provider: by.name, model: by.model, alias: by.alias,
+      viaFallback: !!by.fallback,
+    });
     recordUsage('hit', { t: Date.now() });
     return;
   }
@@ -183,8 +187,12 @@ async function lookup(req, port, signal) {
     const r = await callModel(a, req, port, signal, s, glossPickLevel(a.profile, req.mode, req));
     if (r.ok) {
       if (r.full) {
-        const val = r.reasoning || fallbackFrom ? { t: r.full, r: r.reasoning } : r.full;
-        await cacheSet(cacheKey, val);
+        // 记下实际回答的是谁（可能是限流后的后备），命中缓存时显示它
+        await cacheSet(cacheKey, {
+          t: r.full,
+          r: r.reasoning,
+          by: { name: a.name, model: a.model, alias: a.alias, fallback: !!fallbackFrom },
+        });
       }
       safePost(port, {
         type: 'done', cached: false, provider: a.name, model: a.model, alias: a.alias, level: r.level,
