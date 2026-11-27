@@ -446,17 +446,24 @@ function drawChart(days) {
 
 const KIND = { word: '划词', sentence: '句子', paragraph: '段落' };
 
+let recentOpen = false;
+
 function renderRecent() {
   const body = $('recent');
   body.textContent = '';
-  const rows = usageCache.usageLog.slice(-50).reverse();
-  $('recentEmpty').hidden = rows.length > 0;
+  const all = usageCache.usageLog.slice(-50).reverse();
+  const rows = recentOpen ? all : all.slice(0, 5);
+  $('recentEmpty').hidden = all.length > 0;
+  $('moreRow').hidden = all.length <= 5;
+  $('moreBtn').textContent = recentOpen ? '收起' : `展开更多（最近 ${all.length} 条）`;
   for (const r of rows) {
     const tr = el('tr');
     const d = new Date(r.t);
     const time = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     const who = el('td');
-    who.append((PROVIDERS[r.p]?.name || r.p) + ' ', el('span', 'm', r.m));
+    const mEl = el('span', 'm', r.m);
+    mEl.title = r.m;
+    who.append((PROVIDERS[r.p]?.name || r.p) + ' ', mEl);
     tr.append(
       el('td', null, time),
       who,
@@ -500,6 +507,13 @@ async function init() {
   setupNav();
   if (location.hash) document.querySelector(location.hash)?.scrollIntoView();
 
+  $('moreBtn').addEventListener('click', () => { recentOpen = !recentOpen; renderRecent(); });
+  $('clearCache').addEventListener('click', async () => {
+    const all = await chrome.storage.session.get(null);
+    const keys = Object.keys(all).filter((k) => k.startsWith('c_'));
+    await chrome.storage.session.remove(keys);
+    toast(`已清空 ${Math.max(0, keys.length - 1)} 条翻译缓存`);
+  });
   $('clearUsage').addEventListener('click', async () => {
     if (!confirm('确定清空所有用量记录吗？这一步不能撤销。')) return;
     await chrome.storage.local.remove(['usageDaily', 'usageLog']);

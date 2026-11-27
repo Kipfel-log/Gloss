@@ -113,7 +113,22 @@
   font: 500 12px/1 var(--sans); padding: 6px 10px; border-radius: 8px; cursor: pointer;
 }
 .g-cam:hover { border-color: var(--accent); color: var(--accent); }
-.g-status { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-status {
+  margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 0; background: transparent; padding: 0; color: var(--muted); font: 12px/1.4 var(--sans); cursor: default;
+}
+.g-status.has-think { cursor: pointer; }
+.g-status.has-think:hover { color: var(--accent); }
+.g-status.has-think::after { content: " ▾"; font-size: 10px; }
+.g-status.has-think.open::after { content: " ▴"; }
+.g-think {
+  margin: 2px 0 10px; padding: 8px 10px; background: var(--chip); border-radius: 8px;
+  max-height: 168px; overflow: auto; overscroll-behavior: contain;
+}
+.g-think[hidden] { display: none; }
+.g-think-label { font: 600 11px/1.6 var(--sans); letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
+.g-think-text { font-size: 12.5px; line-height: 1.6; color: var(--muted); white-space: pre-wrap; }
+.g-think.live .g-think-label::after { content: " · 进行中"; color: var(--accent); }
 
 .g-error { font-size: 13.5px; color: var(--text); padding: 4px 0 2px; }
 .g-error button {
@@ -131,21 +146,25 @@
 @keyframes g-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 `;
 
+  const THINK_TPL = `<div class="g-think" hidden><div class="g-think-label">思考过程</div><div class="g-think-text"></div></div>`;
+
   const WORD_TPL = `
 <div class="g-top"><span class="g-head"></span><span class="g-pos skel"></span>
   <button class="g-close" title="关闭 (Esc)">×</button></div>
+${THINK_TPL}
 <div class="g-meaning skel-block"></div>
 <div class="g-colloc" hidden><span class="g-label">搭配</span><span class="g-colloc-text"></span></div>
 <div class="g-sep"></div>
 <div class="g-sent-row"><span class="g-label">整句</span><button class="g-reveal" hidden>显示整句翻译</button></div>
 <div class="g-sentence skel-block"></div>
-<div class="g-foot"><button class="g-cam" title="Alt+C">剑桥词典 ↗</button><span class="g-status"></span></div>`;
+<div class="g-foot"><button class="g-cam" title="Alt+C">剑桥词典 ↗</button><button class="g-status" type="button"></button></div>`;
 
   const SENT_TPL = `
 <div class="g-top"><span class="g-kicker">翻译</span>
   <button class="g-close" title="关闭 (Esc)">×</button></div>
+${THINK_TPL}
 <div class="g-trans skel-block"></div>
-<div class="g-foot"><span class="g-status"></span></div>`;
+<div class="g-foot"><button class="g-status" type="button"></button></div>`;
 
   // ---------- 根节点 ----------
 
@@ -274,7 +293,7 @@
   function openPopup(p) {
     ensureRoot();
     closePopup();
-    current = { ...p, buffer: '', fields: {}, done: false };
+    current = { ...p, buffer: '', reason: '', fields: {}, done: false, thinkPinned: false };
     popEl = document.createElement('div');
     popEl.className = 'g-pop' + (p.mode === 'word' ? '' : ' wide');
     popEl.setAttribute('role', 'dialog');
@@ -282,6 +301,7 @@
     root.appendChild(popEl);
     popEl.addEventListener('mousedown', (e) => e.stopPropagation());
     q('.g-close').addEventListener('click', closePopup);
+    q('.g-status').addEventListener('click', toggleThink);
     if (p.mode === 'word') {
       q('.g-head').textContent = p.selection;
       q('.g-cam').addEventListener('click', () => openCambridge(true));
@@ -344,6 +364,15 @@
     });
   }
 
+  function toggleThink() {
+    if (!current || !current.reason || !current.done) return;
+    const box = q('.g-think');
+    box.hidden = !box.hidden;
+    current.thinkPinned = !box.hidden;
+    q('.g-status').classList.toggle('open', !box.hidden);
+    if (!box.hidden) box.scrollTop = 0;
+  }
+
   function setStatus(text) {
     const el = q('.g-status');
     if (el) el.textContent = text;
@@ -372,8 +401,24 @@
     if (!current || !popEl) return;
     if (m.type === 'thinking') {
       setStatus('思考中…');
+    } else if (m.type === 'reason') {
+      current.reason += m.text;
+      const box = q('.g-think');
+      q('.g-think-text').textContent = current.reason;
+      if (!current.buffer) {
+        // 思考阶段：展开并跟着滚动
+        box.hidden = false;
+        box.classList.add('live');
+        box.scrollTop = box.scrollHeight;
+      }
     } else if (m.type === 'delta') {
-      if (!current.buffer) setStatus('');
+      if (!current.buffer) {
+        setStatus('');
+        // 开始输出正文：思考过程自动收起
+        const box = q('.g-think');
+        box.classList.remove('live');
+        if (!current.thinkPinned) box.hidden = true;
+      }
       current.buffer += m.text;
       render(false);
     } else if (m.type === 'done') {
@@ -381,6 +426,11 @@
       render(true);
       const short = (m.model || '').split('/').pop();
       setStatus(m.cached ? '来自缓存' : (m.provider ? `${m.provider} · ${short}` : ''));
+      const st = q('.g-status');
+      if (current.reason) {
+        st.classList.add('has-think');
+        st.title = '点击查看思考过程';
+      }
       if (current.mode === 'word' && settings.autoCambridge) openCambridge(false);
     } else if (m.type === 'error') {
       showError(m);
@@ -481,6 +531,14 @@
 .highlight { background: var(--tint); border-radius: 6px; padding: .45em .7em; }
 .t:empty::before { content: "翻译中…"; opacity: .45; }
 .t[data-thinking]:empty::before { content: "思考中…"; }
+.think {
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: calc(var(--fs, 16px) * .8); font-weight: 400; font-style: normal; line-height: 1.65;
+  white-space: pre-wrap; opacity: .55; max-height: 11em; overflow: auto; overscroll-behavior: contain;
+  border-left: 2px dashed var(--accent); padding-left: .7em; margin-bottom: .5em;
+}
+.think[hidden] { display: none; }
+.has-think { cursor: pointer; }
 .err { color: #B4453A; font-size: .9em; }
 `;
 
@@ -555,9 +613,19 @@
     const style = document.createElement('style');
     style.textContent = PARA_CSS;
     const wrap = document.createElement('div');
+    const think = document.createElement('div');
+    think.className = 'think';
+    think.hidden = true;
     const t = document.createElement('div');
     t.className = 't';
-    wrap.appendChild(t);
+    wrap.append(think, t);
+    // 翻译完成后，点一下译文可以展开 / 收起思考过程（拖动选字时不触发）
+    wrap.addEventListener('click', () => {
+      if (!wrap.classList.contains('has-think')) return;
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return;
+      think.hidden = !think.hidden;
+    });
     shadow.append(style, wrap);
     node._wrap = wrap;
     node._t = t;
@@ -578,8 +646,17 @@
     node._port = p;
     p.onMessage.addListener((m) => {
       if (m.type === 'thinking') t.dataset.thinking = '1';
-      else if (m.type === 'delta') t.textContent += m.text;
-      else if (m.type === 'done') { t.textContent = t.textContent.trim(); try { p.disconnect(); } catch {} }
+      else if (m.type === 'reason') {
+        think.textContent += m.text;
+        if (!t.textContent) { think.hidden = false; think.scrollTop = think.scrollHeight; }
+      } else if (m.type === 'delta') {
+        if (!t.textContent) think.hidden = true; // 开始输出译文：思考过程自动收起
+        t.textContent += m.text;
+      } else if (m.type === 'done') {
+        t.textContent = t.textContent.trim();
+        if (think.textContent) { wrap.classList.add('has-think'); wrap.title = '点击查看思考过程'; }
+        try { p.disconnect(); } catch {}
+      }
       else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; }
     });
     p.postMessage({ mode: 'paragraph', selection: text, prev, title: document.title.slice(0, 200) });
@@ -587,7 +664,8 @@
 
   function applyParaClass(node) {
     if (!node._wrap) return;
-    node._wrap.className = 'w ' + (settings.paraStyle || 'muted');
+    const hadThink = node._wrap.classList.contains('has-think');
+    node._wrap.className = 'w ' + (settings.paraStyle || 'muted') + (hadThink ? ' has-think' : '');
     node._wrap.style.setProperty('--fs', (Number(settings.paraFont) || 16) + 'px'); // 固定字号，不跟着标题变大
   }
 

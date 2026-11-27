@@ -1,4 +1,4 @@
-.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); max-width: 1040px; margin: 0 auto; gap: 48px; padding: 0 32px; }
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); max-width: 1360px; margin: 0 auto; gap: 72px; padding: 0 56px; }
 
 nav { position: sticky; top: 0; align-self: start; height: 100vh; padding: 48px 0; display: flex; flex-direction: column; gap: 2px; }
 .brand { font: 500 34px/1 var(--serif); letter-spacing: -.02em; margin: 0 0 28px 10px; }
@@ -132,3 +132,9 @@ td .m { color: var(--muted); font-size: 12px; }
 .price-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .price-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
 .price .btn { padding: 6px 10px; font-size: 12px; }
+
+td .m { display: inline-block; max-width: 230px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.more-row { display: flex; justify-content: center; padding: 6px; border-top: 1px solid var(--line); }
+.more-row .btn { font-size: 12.5px; padding: 6px 12px; }
+.usage-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.more-row[hidden] { display: none; }

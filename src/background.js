@@ -66,8 +66,45 @@ function netError(e) {
   return '网络错误：' + m;
 }
 
+// 各家思考过程的字段不同：DeepSeek / 千问 / 硅基流动用 reasoning_content，OpenRouter 用 reasoning_details
+function reasoningOf(delta) {
+  if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) return delta.reasoning_content;
+  if (typeof delta.reasoning === 'string' && delta.reasoning) return delta.reasoning;
+  if (Array.isArray(delta.reasoning_details)) {
+    return delta.reasoning_details
+      .map((x) => (x && (x.text || x.summary)) || '')
+      .filter((x) => x && x !== '[REDACTED]')
+      .join('');
+  }
+  return '';
+}
+
 function safePost(port, msg) {
   try { port.postMessage(msg); } catch { /* 小窗已关闭 */ }
+}
+
+// ---------- 翻译缓存 ----------
+// 存在 chrome.storage.session：只在内存里，关闭浏览器或重新加载插件就清空，上限 10 MB。
+// 这里再加一道保险：最多保留最近 300 条，超出就删最旧的；万一写满，清空后重写。
+const CACHE_MAX = 300;
+let cacheChain = Promise.resolve();
+
+function cacheSet(key, value) {
+  cacheChain = cacheChain.then(async () => {
+    const { c__index = [] } = await chrome.storage.session.get('c__index');
+    const idx = c__index.filter((k) => k !== key);
+    idx.push(key);
+    const drop = idx.length > CACHE_MAX ? idx.splice(0, idx.length - CACHE_MAX) : [];
+    try {
+      if (drop.length) await chrome.storage.session.remove(drop);
+      await chrome.storage.session.set({ [key]: value, c__index: idx });
+    } catch {
+      const all = await chrome.storage.session.get(null);
+      await chrome.storage.session.remove(Object.keys(all).filter((k) => k.startsWith('c_')));
+      await chrome.storage.session.set({ [key]: value, c__index: [key] });
+    }
+  }).catch(() => {});
+  return cacheChain;
 }
 
 // ---------- 用量记录（串行写入，避免并发覆盖） ----------
@@ -122,7 +159,11 @@ async function lookup(req, port, signal) {
   const cacheKey = 'c_' + (await sha256(JSON.stringify([req.mode, a.id, a.model, req.selection, req.sentence || '', req.prev || ''])));
   const cached = (await chrome.storage.session.get(cacheKey))[cacheKey];
   if (cached) {
-    safePost(port, { type: 'delta', text: cached });
+    // 旧版缓存是纯文本，新版是 { t: 译文, r: 思考过程 }
+    const ct = typeof cached === 'string' ? cached : cached.t;
+    const cr = typeof cached === 'string' ? '' : cached.r || '';
+    if (cr) safePost(port, { type: 'reason', text: cr });
+    safePost(port, { type: 'delta', text: ct });
     safePost(port, { type: 'done', cached: true, provider: a.name, model: a.model });
     recordUsage('hit', { t: Date.now() });
     return;
@@ -162,6 +203,7 @@ async function lookup(req, port, signal) {
   const decoder = new TextDecoder();
   let buffer = '';
   let full = '';
+  let reasoning = '';
   let usage = null;
   let firstMs = 0;
 
@@ -180,7 +222,13 @@ async function lookup(req, port, signal) {
         let json;
         try { json = JSON.parse(data); } catch { continue; }
         if (json.usage) usage = json.usage;
-        const text = json.choices?.[0]?.delta?.content;
+        const delta = json.choices?.[0]?.delta || {};
+        const rt = reasoningOf(delta);
+        if (rt) {
+          reasoning += rt;
+          safePost(port, { type: 'reason', text: rt });
+        }
+        const text = delta.content;
         if (text) {
           if (!firstMs) firstMs = Date.now() - t0;
           full += text;
@@ -205,7 +253,7 @@ async function lookup(req, port, signal) {
     }, s.pricing[a.id]);
   }
 
-  if (full) await chrome.storage.session.set({ [cacheKey]: full });
+  if (full) await cacheSet(cacheKey, reasoning ? { t: full, r: reasoning } : full);
   safePost(port, { type: 'done', cached: false, provider: a.name, model: a.model });
 }
 

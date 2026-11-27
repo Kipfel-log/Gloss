@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.1.0';
+const GLOSS_VERSION = '1.2.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -152,8 +152,8 @@ function glossThinkParams(id, level) {
     case 'siliconflow':
       return on ? { enable_thinking: true, thinking_budget: THINK_BUDGET[level] } : { enable_thinking: false };
     case 'openrouter':
-      // exclude：模型照常思考，但不把思考过程传回来（照常计费）
-      return { reasoning: on ? { effort: level, exclude: true } : { effort: 'none' } };
+      // 不设 exclude，让思考过程传回来，小窗里可以展示
+      return { reasoning: on ? { effort: level } : { effort: 'none' } };
     default:
       return on ? { reasoning_effort: level } : {};
   }
