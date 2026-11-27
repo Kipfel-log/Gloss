@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.7.0';
+const GLOSS_VERSION = '1.7.1';
 
 const PROVIDERS = {
   deepseek: {
@@ -60,8 +60,17 @@ const PARA_FONTS = [14, 15, 16, 17, 18];
 
 // 成本估算用的价格（每 100 万 tokens）。DeepSeek 预置官方价格（2026-11 核对）：
 // deepseek-flash 高峰：命中缓存 $0.006 / 未命中 $0.3 / 输出 $1.2；非高峰为高峰的一半。
+// DeepSeek 官方价格（2026-11 核对，高峰时段，每百万 tokens）：
+// 美元：命中缓存 0.006 / 未命中 0.3 / 输出 1.2；人民币：命中缓存 0.04 / 未命中 2 / 输出 8；非高峰均为一半。
+const OFFICIAL_PRICES = {
+  deepseek: {
+    USD: { hit: 0.006, miss: 0.3, out: 1.2 },
+    CNY: { hit: 0.04, miss: 2, out: 8 },
+  },
+};
+
 const PRICING_DEFAULTS = {
-  deepseek: { cur: 'USD', hit: 0.006, miss: 0.3, out: 1.2, offpeak: true },
+  deepseek: { cur: 'CNY', ...OFFICIAL_PRICES.deepseek.CNY, offpeak: true },
   qwen: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
   siliconflow: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
   openrouter: { cur: 'USD', hit: 0, miss: 0, out: 0, offpeak: false },
@@ -104,6 +113,12 @@ async function glossLoad() {
   s.thinking = { ...GLOSS_DEFAULTS.thinking, ...(raw.thinking || {}) };
   s.pricing = {};
   for (const id of PROVIDER_ORDER) s.pricing[id] = { ...PRICING_DEFAULTS[id], ...((raw.pricing || {})[id] || {}) };
+  // 修正：货币选了人民币、数字却还是美元官方价（v1.1–v1.7 切换货币不会自动换算）
+  const dp = s.pricing.deepseek;
+  const usd = OFFICIAL_PRICES.deepseek.USD;
+  if (dp.cur === 'CNY' && dp.hit === usd.hit && dp.miss === usd.miss && dp.out === usd.out) {
+    Object.assign(dp, OFFICIAL_PRICES.deepseek.CNY);
+  }
   // 0.1.0 的旧设置迁移
   if (raw.apiKey && !s.keys.deepseek) s.keys.deepseek = raw.apiKey;
   // 0.2.0 → 0.3.0：没有 added 列表时，把已经填过 Key 的服务商视为已添加

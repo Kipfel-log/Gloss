@@ -431,7 +431,21 @@ function pricingBlock(id) {
     b.dataset.v = v;
     cur.appendChild(b);
   }
-  makeSeg(cur, pr.cur, (v) => { pr.cur = v; savePr(); });
+  const inputs = {};
+  makeSeg(cur, pr.cur, (v) => {
+    // 有官方价格的服务商：如果当前填的就是原货币的官方价，切换货币时一起换成新货币的官方价
+    const off = OFFICIAL_PRICES[id];
+    if (off && off[pr.cur] && off[v]) {
+      const was = off[pr.cur];
+      const untouched = ['hit', 'miss', 'out'].every((k) => pr[k] === was[k] || !pr[k]);
+      if (untouched) {
+        Object.assign(pr, off[v]);
+        for (const k of ['hit', 'miss', 'out']) if (inputs[k]) inputs[k].value = pr[k];
+      }
+    }
+    pr.cur = v;
+    savePr();
+  });
 
   const grid = el('div', 'price-grid');
   const field = (key, label) => {
@@ -442,6 +456,7 @@ function pricingBlock(id) {
     inp.min = '0';
     inp.step = 'any';
     inp.value = pr[key];
+    inputs[key] = inp;
     inp.addEventListener('input', debounce(() => { pr[key] = Math.max(0, Number(inp.value) || 0); savePr(); }, 500));
     w.appendChild(inp);
     return w;
@@ -462,11 +477,13 @@ function pricingBlock(id) {
     const reset = el('button', 'btn', '恢复 DeepSeek 官方价格');
     reset.type = 'button';
     reset.addEventListener('click', async () => {
-      await save({ pricing: { ...S.pricing, deepseek: { ...PRICING_DEFAULTS.deepseek } } });
+      // 按当前选的货币恢复
+      const c = OFFICIAL_PRICES.deepseek[pr.cur] ? pr.cur : 'CNY';
+      await save({ pricing: { ...S.pricing, deepseek: { cur: c, ...OFFICIAL_PRICES.deepseek[c], offpeak: true } } });
       renderProviders();
     });
     box.append(
-      el('p', 'hint', '已预置 deepseek-flash 官方价格（2026 年 11 月核对）。高峰时段为北京时间工作日 9–12 点、14–18 点，其余时间半价；法定节假日全天也是半价，但这里识别不了节假日，那几天的估算会偏高。'),
+      el('p', 'hint', '已预置 deepseek-flash 官方价格（2026 年 11 月核对）：人民币 ¥2 / 缓存命中 ¥0.04 / 输出 ¥8，美元 $0.3 / $0.006 / $1.2；切换货币时会自动换成对应的官方价。高峰时段为北京时间工作日 9–12 点、14–18 点，其余时间半价；法定节假日全天也是半价，但这里识别不了节假日，那几天的估算会偏高。'),
       reset,
     );
   }
