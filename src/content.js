@@ -68,25 +68,37 @@
 .g-pop.above { transform: translateY(-100%); animation: none; }
 @keyframes g-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.g-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.g-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 6px; padding-right: 30px; position: relative; }
 .g-head {
   font: 500 21px/1.25 var(--serif); letter-spacing: -.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
 .g-kicker { font: 600 11px/1 var(--sans); letter-spacing: .08em; color: var(--muted); }
 .g-pos {
-  flex-shrink: 0; font: 500 12px/1.4 var(--sans); color: var(--accent);
-  background: var(--accent-soft); padding: 1px 7px; border-radius: 6px;
+  flex-shrink: 1; min-width: 0; max-width: 100%; font: 500 12px/1.5 var(--sans); color: var(--accent);
+  background: var(--accent-soft); padding: 1px 7px; border-radius: 6px; overflow-wrap: anywhere;
 }
 .g-pos:empty:not(.skel) { display: none; }
 .g-close {
-  margin-left: auto; flex-shrink: 0; align-self: center; width: 24px; height: 24px; padding: 0;
+  position: absolute; top: -2px; right: -4px; width: 24px; height: 24px; padding: 0;
   border: 0; border-radius: 6px; background: transparent; color: var(--muted);
   font: 18px/24px var(--sans); cursor: pointer;
 }
 .g-close:hover { background: var(--chip); color: var(--text); }
 
 .g-meaning { font-size: 15px; margin: 2px 0 8px; }
+.g-phead { font: 500 16px/1.4 var(--serif); color: var(--text); overflow-wrap: anywhere; }
+.g-sec { margin-top: 10px; }
+.g-sec[hidden] { display: none; }
+.g-sec .g-label { display: block; margin-bottom: 4px; }
+.g-struct { font-size: 13.5px; color: var(--text); }
+.g-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.g-list li { font-size: 13.5px; line-height: 1.55; padding: 6px 10px; background: var(--chip); border-radius: 8px; }
+.g-list li b { font-weight: 600; color: var(--text); }
+.g-list li .pos { color: var(--accent); font-size: 12px; margin: 0 6px; }
+.g-list li .zh { color: var(--muted); }
+.g-example { font-size: 13.5px; line-height: 1.6; padding-left: 10px; border-left: 2px solid var(--accent); }
+.g-example .zh { display: block; color: var(--muted); }
 .g-colloc {
   display: flex; gap: 8px; align-items: baseline; margin: 0 0 8px;
   padding: 6px 10px; background: var(--chip); border-radius: 8px; font-size: 13px;
@@ -172,6 +184,17 @@ ${THINK_TPL}
 <div class="g-sent-row"><span class="g-label">整句</span><button class="g-reveal" hidden>显示整句翻译</button></div>
 <div class="g-sentence skel-block"></div>
 <div class="g-foot"><button class="g-cam" title="Alt+C">剑桥词典 ↗</button><button class="g-status" type="button"></button></div>`;
+
+  const PHRASE_TPL = `
+<div class="g-top"><span class="g-kicker">短语</span><span class="g-phead"></span>
+  <button class="g-close" title="关闭 (Esc)">×</button></div>
+${THINK_TPL}
+<div class="g-meaning skel-block"></div>
+<div class="g-sec g-sec-struct" hidden><span class="g-label">结构</span><div class="g-struct"></div></div>
+<div class="g-sec g-sec-coll" hidden><span class="g-label">固定搭配 / 短语</span><ul class="g-list g-colls"></ul></div>
+<div class="g-sec g-sec-word" hidden><span class="g-label">值得记的词</span><ul class="g-list g-words"></ul></div>
+<div class="g-sec g-sec-ex" hidden><span class="g-label">例句</span><div class="g-example"></div></div>
+<div class="g-foot"><button class="g-status" type="button"></button></div>`;
 
   const SENT_TPL = `
 <div class="g-top"><span class="g-kicker">翻译</span>
@@ -311,7 +334,8 @@ ${THINK_TPL}
     popEl = document.createElement('div');
     popEl.className = 'g-pop' + (p.mode === 'word' ? '' : ' wide');
     popEl.setAttribute('role', 'dialog');
-    popEl.innerHTML = p.mode === 'word' ? WORD_TPL : SENT_TPL; // 模板是固定字符串，不含网页内容
+    popEl.innerHTML = p.mode === 'word' ? WORD_TPL : p.mode === 'phrase' ? PHRASE_TPL : SENT_TPL; // 模板是固定字符串，不含网页内容
+    if (p.mode === 'phrase') popEl.querySelector('.g-phead').textContent = p.selection;
     root.appendChild(popEl);
     popEl.addEventListener('mousedown', (e) => e.stopPropagation());
     q('.g-close').addEventListener('click', closePopup);
@@ -510,8 +534,72 @@ ${THINK_TPL}
       } else {
         box.hidden = true;
       }
+    } else if (current.mode === 'phrase') {
+      renderPhrase(final);
     } else {
       fill('.g-trans', current.buffer.trim(), final);
+    }
+  }
+
+  // 短语模式：MEANING / STRUCTURE 各一行，COLLOC / WORD 可多行，EXAMPLE 一行
+  function parsePhrase(buf) {
+    const f = { COLLOC: [], WORD: [] };
+    for (const raw of buf.split('\n')) {
+      const line = raw.trim();
+      const mm = line.match(/^(MEANING|STRUCTURE|COLLOC|WORD|EXAMPLE)\s*[:：]\s*(.*)$/i);
+      if (!mm) continue;
+      const k = mm[1].toUpperCase();
+      const v = mm[2].trim();
+      if (!v || /^(无|none|n\/a|-|—)[。.]?$/i.test(v)) continue;
+      if (k === 'COLLOC' || k === 'WORD') f[k].push(v); else f[k] = v;
+    }
+    return f;
+  }
+
+  function splitPair(v) {
+    const i = v.search(/\s[—–-]{1,2}\s/);
+    return i < 0 ? [v, ''] : [v.slice(0, i).trim(), v.slice(i).replace(/^\s*[—–-]{1,2}\s*/, '').trim()];
+  }
+
+  function renderPhrase(final) {
+    const f = parsePhrase(current.buffer);
+    fill('.g-meaning', f.MEANING, final);
+    const sec = (cls, show) => { q(cls).hidden = !show; };
+
+    sec('.g-sec-struct', !!f.STRUCTURE);
+    if (f.STRUCTURE) q('.g-struct').textContent = f.STRUCTURE;
+
+    sec('.g-sec-coll', f.COLLOC.length > 0);
+    const cl = q('.g-colls');
+    cl.textContent = '';
+    for (const v of f.COLLOC) {
+      const [en, zh] = splitPair(v);
+      const li = document.createElement('li');
+      const b = document.createElement('b'); b.textContent = en;
+      li.appendChild(b);
+      if (zh) { const s = document.createElement('span'); s.className = 'zh'; s.textContent = '  ' + zh; li.appendChild(s); }
+      cl.appendChild(li);
+    }
+
+    sec('.g-sec-word', f.WORD.length > 0);
+    const wl = q('.g-words');
+    wl.textContent = '';
+    for (const v of f.WORD) {
+      const [w, pos, ...rest] = v.split('|').map((x) => x.trim());
+      const li = document.createElement('li');
+      const b = document.createElement('b'); b.textContent = w;
+      li.appendChild(b);
+      if (pos) { const s = document.createElement('span'); s.className = 'pos'; s.textContent = pos; li.appendChild(s); }
+      if (rest.length) { const s = document.createElement('span'); s.className = 'zh'; s.textContent = rest.join(' | '); li.appendChild(s); }
+      wl.appendChild(li);
+    }
+
+    sec('.g-sec-ex', !!f.EXAMPLE);
+    if (f.EXAMPLE) {
+      const [en, zh] = splitPair(f.EXAMPLE);
+      const ex = q('.g-example');
+      ex.textContent = en;
+      if (zh) { const s = document.createElement('span'); s.className = 'zh'; s.textContent = zh; ex.appendChild(s); }
     }
   }
 
@@ -610,11 +698,32 @@ ${THINK_TPL}
     if (e.key !== 'Shift' || !shiftClean) return;
     shiftClean = false;
     if (Date.now() - shiftAt > 500) return; // 按住太久不算“单按”
-    if (!settings.enabled || !settings.paraEnabled || mouseX < 0) return;
+    if (!settings.enabled) return;
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+    // 框选了一段英文时：Shift 进入短语模式；没有选中时：翻译鼠标所在段落
+    if (openPhraseFromSelection()) return;
+    if (!settings.paraEnabled || mouseX < 0) return;
     toggleParagraphAt(mouseX, mouseY);
   }, true);
+
+  function openPhraseFromSelection() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+    const text = sel.toString().replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 400 || !/[A-Za-z]{2}/.test(text)) return false;
+    const range = sel.getRangeAt(0);
+    if (host && host.contains(range.commonAncestorContainer)) return false;
+    const r = range.getBoundingClientRect();
+    if (!r.width && !r.height) return false;
+    hideIcon();
+    openPopup({
+      ...getContext(range, text),
+      mode: 'phrase',
+      rect: { left: r.left + scrollX, right: r.right + scrollX, top: r.top + scrollY, bottom: r.bottom + scrollY },
+    });
+    return true;
+  }
 
   function blockOf(el) {
     const b = el.closest(PARA_BLOCK);

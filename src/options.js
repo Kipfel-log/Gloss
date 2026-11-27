@@ -454,29 +454,7 @@ function pricingBlock(id) {
   const box = el('div', 'price');
   box.appendChild(el('h4', null, '价格'));
 
-  const cur = el('div', 'seg');
-  for (const [v, l] of [['USD', '美元 $'], ['CNY', '人民币 ¥']]) {
-    const b = el('button', null, l);
-    b.type = 'button';
-    b.dataset.v = v;
-    cur.appendChild(b);
-  }
   const inputs = {};
-  makeSeg(cur, pr.cur, (v) => {
-    // 有官方价格的服务商：如果当前填的就是原货币的官方价，切换货币时一起换成新货币的官方价
-    const off = OFFICIAL_PRICES[id];
-    if (off && off[pr.cur] && off[v]) {
-      const was = off[pr.cur];
-      const untouched = ['hit', 'miss', 'out'].every((k) => pr[k] === was[k] || !pr[k]);
-      if (untouched) {
-        Object.assign(pr, off[v]);
-        for (const k of ['hit', 'miss', 'out']) if (inputs[k]) inputs[k].value = pr[k];
-      }
-    }
-    pr.cur = v;
-    savePr();
-  });
-
   const grid = el('div', 'price-grid');
   const field = (key, label) => {
     const w = el('label', 'fl');
@@ -501,19 +479,18 @@ function pricingBlock(id) {
   makeSwitch(cb, pr.offpeak, (v) => { pr.offpeak = v; savePr(); });
   row.append(el('span', null, '峰谷计价：非高峰时段半价'), sw);
 
-  box.append(el('p', 'hint', '单位：每 100 万 tokens，填高峰时段的价格。'), cur, grid, row);
+  box.append(el('p', 'hint', '单位：人民币 / 每 100 万 tokens，填高峰时段的价格。'), grid, row);
 
   if (id === 'deepseek') {
     const reset = el('button', 'btn', '恢复 DeepSeek 官方价格');
     reset.type = 'button';
     reset.addEventListener('click', async () => {
       // 按当前选的货币恢复
-      const c = OFFICIAL_PRICES.deepseek[pr.cur] ? pr.cur : 'CNY';
-      await save({ pricing: { ...S.pricing, deepseek: { cur: c, ...OFFICIAL_PRICES.deepseek[c], offpeak: true } } });
+      await save({ pricing: { ...S.pricing, deepseek: { cur: 'CNY', ...OFFICIAL_PRICES.deepseek.CNY, offpeak: true } } });
       renderProviders();
     });
     box.append(
-      el('p', 'hint', '已预置 deepseek-flash 官方价格（2026 年 11 月核对）：人民币 ¥2 / 缓存命中 ¥0.04 / 输出 ¥8，美元 $0.3 / $0.006 / $1.2；切换货币时会自动换成对应的官方价。高峰时段为北京时间工作日 9–12 点、14–18 点，其余时间半价；法定节假日全天也是半价，但这里识别不了节假日，那几天的估算会偏高。'),
+      el('p', 'hint', '已预置 deepseek-flash 官方价格（2026 年 11 月核对）：输入 ¥2 / 缓存命中 ¥0.04 / 输出 ¥8。高峰时段为北京时间工作日 9–12 点、14–18 点，其余时间半价；法定节假日全天也是半价，但这里识别不了节假日，那几天的估算会偏高。'),
       reset,
     );
   }
@@ -600,7 +577,7 @@ function renderUsage() {
     ['输入 tokens', glossFmtTokens(sum.i)],
     ['输出 tokens', glossFmtTokens(sum.o)],
     ['平均耗时', sum.calls ? (sum.ms / sum.calls / 1000).toFixed(2) + ' s' : '—'],
-    ['估计成本', costMain(sum.cost), false, costRest(sum.cost)],
+    ['估计成本', glossFmtCosts(sum.cost)],
     ['本地缓存命中', String(sum.hits)],
     ['失败次数', String(sum.err), sum.err > 0, sum.lim ? `其中限流 ${sum.lim} 次` : ''],
   ];
@@ -696,7 +673,7 @@ function drawChart(days) {
   });
 }
 
-const KIND = { word: '划词', sentence: '句子', paragraph: '段落' };
+const KIND = { word: '划词', phrase: '短语', sentence: '句子', paragraph: '段落' };
 const LEVEL_LABEL = { low: '低', medium: '中', high: '高' };
 
 function thinkCell(r) {
@@ -732,7 +709,7 @@ function renderRecent() {
       el('td', 'r', thinkCell(r)),
       el('td', 'r', r.f ? (r.f / 1000).toFixed(2) + ' s' : '—'),
       el('td', 'r', (r.ms / 1000).toFixed(2) + ' s'),
-      el('td', 'r', r.$ != null ? glossFmtMoney(r.$, r.cur) : '—'),
+      el('td', 'r', r.$ != null && r.cur === 'CNY' ? glossFmtMoney(r.$, 'CNY') : '—'),
     );
     body.appendChild(tr);
   }

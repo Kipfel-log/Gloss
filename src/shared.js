@@ -1,7 +1,7 @@
 // Gloss 共享配置：后台、小设置弹窗、完整设置页共用。
 // （content script 不加载这个文件，它只读取界面相关的开关，不接触 API Key。）
 
-const GLOSS_VERSION = '1.9.0';
+const GLOSS_VERSION = '1.10.0';
 
 const PROVIDERS = {
   deepseek: {
@@ -73,8 +73,8 @@ const PRICING_DEFAULTS = {
   deepseek: { cur: 'CNY', ...OFFICIAL_PRICES.deepseek.CNY, offpeak: true },
   qwen: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
   siliconflow: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
-  openrouter: { cur: 'USD', hit: 0, miss: 0, out: 0, offpeak: false },
-  custom: { cur: 'USD', hit: 0, miss: 0, out: 0, offpeak: false },
+  openrouter: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
+  custom: { cur: 'CNY', hit: 0, miss: 0, out: 0, offpeak: false },
 };
 
 const GLOSS_DEFAULTS = {
@@ -116,9 +116,11 @@ async function glossLoad() {
   // 修正：货币选了人民币、数字却还是美元官方价（v1.1–v1.7 切换货币不会自动换算）
   const dp = s.pricing.deepseek;
   const usd = OFFICIAL_PRICES.deepseek.USD;
-  if (dp.cur === 'CNY' && dp.hit === usd.hit && dp.miss === usd.miss && dp.out === usd.out) {
+  if (dp.hit === usd.hit && dp.miss === usd.miss && dp.out === usd.out) {
     Object.assign(dp, OFFICIAL_PRICES.deepseek.CNY);
   }
+  // v1.10 起成本统一用人民币计
+  for (const id of PROVIDER_ORDER) s.pricing[id].cur = 'CNY';
   // 0.1.0 的旧设置迁移
   if (raw.apiKey && !s.keys.deepseek) s.keys.deepseek = raw.apiKey;
   // 0.2.0 → 0.3.0：没有 added 列表时，把已经填过 Key 的服务商视为已添加
@@ -185,9 +187,10 @@ function glossWordCount(text) {
 }
 
 function glossPickLevel(profile, mode, req) {
-  const set = mode === 'word' ? profile.word : profile.para;
+  const wordLike = mode === 'word' || mode === 'phrase'; // 短语模式也用“划词”的方案
+  const set = wordLike ? profile.word : profile.para;
   if (set !== 'auto') return set || 'off';
-  const n = glossWordCount(mode === 'word' ? req.sentence || req.selection : req.selection);
+  const n = glossWordCount(wordLike ? req.sentence || req.selection : req.selection);
   const rules = [...(profile.rules || [])].sort((a, b) => a.max - b.max);
   for (const r of rules) if (n <= r.max) return r.lv;
   return profile.rest || 'off';
@@ -266,8 +269,7 @@ function glossFmtMoney(n, cur) {
   return sign + n.toFixed(2);
 }
 
-// costs: { USD: 0.01, CNY: 0.2 }
+// 成本统一按人民币显示；以前按美元记的记录不再计入
 function glossFmtCosts(costs) {
-  const parts = Object.entries(costs || {}).filter(([, v]) => v > 0).map(([c, v]) => glossFmtMoney(v, c));
-  return parts.length ? parts.join(' + ') : '$0';
+  return glossFmtMoney((costs || {}).CNY || 0, 'CNY');
 }

@@ -9,9 +9,18 @@ const WORD_SYSTEM = `你是英语阅读助手，帮助中国学生读懂网页�
 用户会给出选中的词或短语，以及它所在的句子和段落。请根据语境作答。
 严格按下面的格式输出，每项一行，不要输出其他任何内容，不要使用 Markdown：
 LEMMA: 选中内容的词典原形（例：作形容词的 dedicated 仍是 dedicated；作动词过去式的 dedicated 是 dedicate；短语给出词典条目形式）
-POS: 它在这句话里的词性，用 n. / v. / adj. / adv. / prep. / conj. / pron. / phr. 等缩写，必要时在括号里加简短说明
+POS: 它在这句话里的词性，用 n. / v. / adj. / adv. / prep. / conj. / pron. / phr. 等缩写，必要时在括号里加不超过 8 个字的说明；如果选中的是几个词拼成的片段而不是一个完整短语，就只写 phr.
 MEANING: 它在这句话里的中文意思，简洁，不超过一句话
 COLLOCATION: 句中与它相关的固定搭配及中文意思，例如 be dedicated to doing 致力于做某事；没有就写 无`;
+
+const PHRASE_SYSTEM = `你是英语学习助手，帮助中国学生读懂并学会网页上的英语。
+用户选中了句子里的一部分（可能是短语、半句或几个词），并给出它所在的句子和段落。
+严格按下面的格式输出，不要输出其他任何内容，不要使用 Markdown：
+MEANING: 选中部分在这句话里的中文意思，一句话
+STRUCTURE: 用一句话说明这部分的语法结构，例如“定语从句，修饰 messages”，简短
+COLLOC: 选中部分及紧挨着的地方值得学习的固定搭配或短语，格式“英文 — 中文”；每条单独一行，以 COLLOC: 开头，最多 4 条；没有就不写这一行
+WORD: 值得记的单词，格式“单词 | 词性 | 在这里的意思”；每条单独一行，以 WORD: 开头，最多 4 条；跳过 the、is、and 这类简单词
+EXAMPLE: 用最主要的那个搭配造一个简单例句，格式“英文 — 中文”`;
 
 const SENTENCE_SYSTEM = `你是英语翻译助手。把用户选中的英文译成通顺、准确的中文。
 结合给出的上下文处理指代、术语和语气。只输出译文，不要解释，不要使用 Markdown。`;
@@ -27,16 +36,16 @@ function buildMessages(req) {
     return [{ role: 'system', content: PARA_SYSTEM }, { role: 'user', content: ctx.join('\n') }];
   }
   if (req.paragraph && req.paragraph !== req.selection) ctx.push(`所在段落：${req.paragraph}`);
-  if (req.mode === 'word') {
+  if (req.mode === 'word' || req.mode === 'phrase') {
     if (req.sentence) ctx.push(`所在句子：${req.sentence}`);
     ctx.push(`选中：${req.selection}`);
-    return [{ role: 'system', content: WORD_SYSTEM }, { role: 'user', content: ctx.join('\n') }];
+    return [{ role: 'system', content: req.mode === 'phrase' ? PHRASE_SYSTEM : WORD_SYSTEM }, { role: 'user', content: ctx.join('\n') }];
   }
   ctx.push(`需要翻译的内容：${req.selection}`);
   return [{ role: 'system', content: SENTENCE_SYSTEM }, { role: 'user', content: ctx.join('\n') }];
 }
 
-const MAX_TOKENS = { word: 300, sentence: 1200, paragraph: 1600 };
+const MAX_TOKENS = { phrase: 700, word: 300, sentence: 1200, paragraph: 1600 };
 
 // ---------- 工具函数 ----------
 
