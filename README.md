@@ -76,5 +76,3 @@ docs/                路线图、设计文档
 本项目使用 [PolyForm Noncommercial License 1.0.0](LICENSE)：可以免费用于个人学习、研究等**非商业**用途，**不允许商用**。
 
 Copyright 2026 Kipfel-log
-
-> v1.11.3 及之前的版本按 Apache License 2.0 发布。
