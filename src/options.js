@@ -19,8 +19,11 @@ async function save(patch, quiet) {
 }
 
 function debounce(fn, ms) {
-  let t;
-  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+  let t = 0, args = null;
+  const d = (...a) => { args = a; clearTimeout(t); t = setTimeout(() => { t = 0; fn(...args); }, ms); };
+  // 立刻执行还没到时间的那次保存（比如点“测试连接”前，先把刚粘贴的 Key 存进去）
+  d.flush = async () => { if (!t) return; clearTimeout(t); t = 0; await fn(...args); };
+  return d;
 }
 
 // ---------- 模型服务 ----------
@@ -259,6 +262,8 @@ function providerCard(id) {
   test.addEventListener('click', async () => {
     status.className = 'status';
     status.textContent = '正在测试…';
+    await saveKey.flush();
+    await saveModel.flush();
     const r = await chrome.runtime.sendMessage({ type: 'test', provider: id });
     status.textContent = r?.message || '没有收到回应。';
     status.className = 'status ' + (r?.ok ? 'ok' : 'bad');
@@ -783,8 +788,15 @@ function setupBackup() {
     // 文件里没有用量记录就不动现有的
     for (const k of USAGE_KEYS) if (!(k in data) && cur[k]) data[k] = cur[k];
 
-    await chrome.storage.local.clear();
-    await chrome.storage.local.set(data);
+    // 先写入，成功之后再删掉文件里没有的旧项；写入失败时现有设置原封不动
+    try {
+      await chrome.storage.local.set(data);
+      const stale = Object.keys(await chrome.storage.local.get(null)).filter((k) => !(k in data));
+      if (stale.length) await chrome.storage.local.remove(stale);
+    } catch (e) {
+      toast('导入失败，现有设置没有改动：' + (e && e.message || e));
+      return;
+    }
     const needGrant = data.provider === 'custom' || (data.added || []).includes('custom');
     toast(needGrant ? '已导入。自定义接口需要在卡片里重新点一次“授权并保存”' : '已导入');
     setTimeout(() => location.reload(), needGrant ? 2200 : 900);

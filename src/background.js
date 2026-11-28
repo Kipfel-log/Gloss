@@ -61,6 +61,7 @@ function errorMessage(status, bodyText, providerName) {
     case 429: return `${providerName} 触发速率限制（429）：请求太频繁，或免费额度用完了。稍后再试，或在设置里给它开“限流时切换后备”。`;
     case 500:
     case 503: return `${providerName} 服务器繁忙（${status}），稍后再试。`;
+    case 0: return `连不上 ${providerName}，请重试。`;
     default: {
       let detail = '';
       try { detail = JSON.parse(bodyText)?.error?.message || ''; } catch { detail = bodyText || ''; }
@@ -171,7 +172,10 @@ async function lookup(req, port, signal) {
   }
 
   // 缓存键用主服务商：就算这次是后备答的，下次同样的内容也直接命中
-  const cacheKey = 'c_' + (await sha256(JSON.stringify([req.mode, prim.id, prim.model, req.selection, req.sentence || '', req.prev || ''])));
+  // 缓存键包含实际发给模型的全部上下文：同一句出现在不同段落、不同网页时不会串
+  const cacheKey = 'c_' + (await sha256(JSON.stringify([
+    req.mode, prim.id, prim.model, req.selection, req.sentence || '', req.prev || '', req.paragraph || '', req.title || '',
+  ])));
   const cached = (await chrome.storage.session.get(cacheKey))[cacheKey];
   if (cached) {
     // 旧版缓存是纯文本；新版是 { t: 译文, r: 思考过程, by: 实际回答的模型 }
@@ -195,7 +199,18 @@ async function lookup(req, port, signal) {
     // 思考方案跟着模型走：后备服务商用它自己的方案
     const r = await callModel(a, req, port, signal, s, glossPickLevel(a.profile, req.mode, req));
     if (r.ok) {
-      if (r.full) {
+      if (!r.full.trim()) {
+        safePost(port, {
+          type: 'error',
+          message: r.finish === 'length'
+            ? `${a.name} 的思考用完了输出上限，没来得及写译文。可以把思考强度调低一档再试。`
+            : `${a.name} 没有返回译文，请重试。`,
+        });
+        return;
+      }
+      // 只有确认正常结束才写缓存：被截断的半截译文不缓存，下次会重新请求
+      const complete = r.finish === 'stop' || (r.finish == null && r.sawDone);
+      if (complete) {
         // 记下实际回答的是谁（可能是限流后的后备），命中缓存时显示它
         await cacheSet(cacheKey, {
           t: r.full,
@@ -205,7 +220,7 @@ async function lookup(req, port, signal) {
       }
       safePost(port, {
         type: 'done', cached: false, provider: a.name, model: a.model, alias: a.alias, level: r.level,
-        fallbackFrom,
+        fallbackFrom, truncated: !complete, finish: r.finish,
       });
       return;
     }
@@ -221,15 +236,26 @@ async function lookup(req, port, signal) {
     safePost(port, {
       type: 'error',
       rateLimited: r.status === 429,
-      message: errorMessage(r.status, r.body, a.name) + (fallbackFrom ? `（已从 ${fallbackFrom} 切换过来）` : ''),
+      message: (r.timeout
+        ? `${a.name} 超过 ${IDLE_TIMEOUT / 1000} 秒没有响应，已中止，请重试。`
+        : errorMessage(r.status, r.body, a.name)) + (fallbackFrom ? `（已从 ${fallbackFrom} 切换过来）` : ''),
     });
     return;
   }
 }
 
-// 调用一次模型：成功时边收边转发，返回 { ok: true, full, reasoning, level }；失败返回 { ok: false, status, body }
-async function callModel(a, req, port, signal, s, level) {
+// 超过这么久收不到任何数据（包括服务商的保活注释行）就中止
+const IDLE_TIMEOUT = 60000;
+
+// 调用一次模型：成功时边收边转发，返回 { ok: true, full, reasoning, level, finish, sawDone }；
+// 失败返回 { ok: false, status, body, timeout? }
+async function callModel(a, req, port, outerSignal, s, level) {
   const t0 = Date.now();
+  const idle = new AbortController();
+  let idleTimer = 0;
+  const kick = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => idle.abort(), IDLE_TIMEOUT); };
+  const signal = AbortSignal.any([outerSignal, idle.signal]);
+  kick();
   const P = PROVIDERS[a.id] || {};
   // 扩散模型：每一块都是“当前完整文本”，前端整段替换，就能看到文字逐步变清晰
   const diffusing = !!P.diffusion && (s.diffusing || {})[a.id] !== false;
@@ -254,11 +280,17 @@ async function callModel(a, req, port, signal, s, level) {
       }),
     });
   } catch (e) {
+    clearTimeout(idleTimer);
+    if (idle.signal.aborted && !outerSignal.aborted) {
+      recordUsage('error', { t: Date.now() });
+      return { ok: false, status: 0, body: '', timeout: true };
+    }
     if (e.name !== 'AbortError') recordUsage('error', { t: Date.now() });
     throw e;
   }
 
   if (!resp.ok) {
+    clearTimeout(idleTimer);
     const body = await resp.text().catch(() => '');
     recordUsage('error', { t: Date.now(), limited: resp.status === 429 });
     return { ok: false, status: resp.status, body };
@@ -271,11 +303,23 @@ async function callModel(a, req, port, signal, s, level) {
   let reasoning = '';
   let usage = null;
   let firstMs = 0;
+  let finish = null;    // 最后一个 finish_reason
+  let sawDone = false;  // 收到了 [DONE]
+  let streamErr = null; // 流内报错（HTTP 200 之后出错，OpenRouter 等会这样发）
+  let timedOut = false;
 
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      let chunk;
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        if (idle.signal.aborted && !outerSignal.aborted) { timedOut = true; break; }
+        throw e;
+      }
+      const { value, done } = chunk;
       if (done) break;
+      kick();
       buffer += decoder.decode(value, { stream: true });
       let nl;
       while ((nl = buffer.indexOf('\n')) >= 0) {
@@ -283,10 +327,13 @@ async function callModel(a, req, port, signal, s, level) {
         buffer = buffer.slice(nl + 1);
         if (!line.startsWith('data:')) continue; // 空行、keep-alive 注释
         const data = line.slice(5).trim();
-        if (data === '[DONE]') continue;
+        if (data === '[DONE]') { sawDone = true; continue; }
         let json;
         try { json = JSON.parse(data); } catch { continue; }
         if (json.usage) usage = json.usage;
+        if (json.error) { streamErr = json.error; finish = 'error'; continue; }
+        const fr = json.choices?.[0]?.finish_reason;
+        if (fr) finish = fr;
         const delta = json.choices?.[0]?.delta || {};
         const rt = reasoningOf(delta);
         if (rt) {
@@ -317,6 +364,7 @@ async function callModel(a, req, port, signal, s, level) {
       }
     }
   } finally {
+    clearTimeout(idleTimer);
     // 中途关掉小窗也照样记账：已经生成的部分同样计费
     recordUsage('call', {
       t: t0,
@@ -334,7 +382,13 @@ async function callModel(a, req, port, signal, s, level) {
     }, s.pricing[a.id]);
   }
 
-  return { ok: true, full, reasoning, level };
+  if (timedOut) return { ok: false, status: 0, body: '', timeout: true };
+  if (streamErr || finish === 'error') {
+    // 流内报错按失败处理：不显示“完成”、不写缓存；错误码是 429 时照样走限流后备
+    const code = Number(streamErr && streamErr.code) || 502;
+    return { ok: false, status: code, body: JSON.stringify({ error: streamErr || { message: '服务商中途报错' } }) };
+  }
+  return { ok: true, full, reasoning, level, finish, sawDone };
 }
 
 chrome.runtime.onConnect.addListener((port) => {

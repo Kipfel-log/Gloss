@@ -10,7 +10,7 @@
 
   // 只读取界面相关的开关；API Key 只在后台读取
   const UI_DEFAULTS = {
-    enabled: true, triggerMode: 'icon', showSentence: true, autoCambridge: false, wordOnly: false,
+    enabled: true, triggerMode: 'icon', showSentence: false, autoCambridge: false, wordOnly: false,
     paraEnabled: true, paraStyle: 'muted', paraFont: 16, paraMeta: 'hover',
   };
   const settings = { ...UI_DEFAULTS };
@@ -229,8 +229,29 @@ ${THINK_TPL}
     let node = range.commonAncestorContainer;
     if (node.nodeType !== 1) node = node.parentElement;
     const block = (node && node.closest(BLOCK)) || node;
-    let para = ((block && (block.innerText || block.textContent)) || text).replace(/\s+/g, ' ').trim();
-    let idx = para.indexOf(text);
+    const norm = (s) => s.replace(/\s+/g, ' ');
+    let para = norm((block && block.textContent) || text);
+    // 用选区在段落里的真实位置定位，而不是找第一次出现：
+    // 同一个词在段落里出现多次时，取的是你选中的那一处所在的句子
+    let idx = -1;
+    try {
+      const pre = document.createRange();
+      pre.setStart(block, 0);
+      pre.setEnd(range.startContainer, range.startOffset);
+      const off = norm(pre.toString()).length;
+      // 选区开头可能落在空白里，在附近找最近的一处
+      let best = -1;
+      for (let i = para.indexOf(text); i >= 0; i = para.indexOf(text, i + 1)) {
+        if (best < 0 || Math.abs(i - off) < Math.abs(best - off)) best = i;
+        if (i > off + 50) break;
+      }
+      idx = best;
+    } catch {}
+    if (idx < 0) idx = para.indexOf(text);
+    const lead = para.length - para.trimStart().length;
+    para = para.trim();
+    idx -= lead;
+    if (idx < 0 || para.slice(idx, idx + text.length) !== text) idx = para.indexOf(text);
     if (idx < 0) { para = text; idx = 0; }
     if (para.length > 1500) {
       const start = Math.max(0, idx - 700);
@@ -289,8 +310,9 @@ ${THINK_TPL}
   const DIRECT_DELAY = 300;
   let directTimer = 0;
 
+  // 只响应真实的鼠标键盘操作：网页脚本伪造的事件不能替你发起（计费的）模型请求
   document.addEventListener('mouseup', (e) => {
-    if (e.button !== 0 || inHost(e)) return;
+    if (!e.isTrusted || e.button !== 0 || inHost(e)) return;
     setTimeout(() => handleSelection(e), 0);
   }, true);
 
@@ -302,7 +324,7 @@ ${THINK_TPL}
   }, true);
 
   document.addEventListener('keydown', (e) => {
-    if (!popEl) return;
+    if (!e.isTrusted || !popEl) return;
     if (e.key === 'Escape') {
       closePopup();
     } else if (e.altKey && e.code === 'KeyC' && current && current.mode === 'word') {
@@ -398,12 +420,22 @@ ${THINK_TPL}
     let my;
     try { my = chrome.runtime.connect({ name: 'gloss' }); } catch { return; }
     sentPort = my;
-    let buf = '';
+    let buf = '', ended = false;
     my.onMessage.addListener((m) => {
+      if (m.type === 'done' || m.type === 'error') ended = true;
       if (sentPort !== my || !popEl) return;
       if (m.type === 'delta') { buf = m.replace ? m.text : buf + m.text; fill('.g-sentence', buf.trim(), false); }
       else if (m.type === 'done') { fill('.g-sentence', buf.trim(), true); try { my.disconnect(); } catch {} }
-      else if (m.type === 'error') { fill('.g-sentence', m.message || '出错了。', true); }
+      else if (m.type === 'error') { fill('.g-sentence', m.message || '出错了。', true); sentPort = null; }
+    });
+    my.onDisconnect.addListener(() => {
+      // 后台意外断开（扩展重载、Service Worker 被回收）：不要一直转圈
+      if (sentPort !== my || ended) return;
+      sentPort = null;
+      if (popEl && q('.g-sentence')) {
+        q('.g-sentence').classList.remove('skel-block');
+        q('.g-sentence').textContent = buf.trim() ? buf.trim() + '（连接中断）' : '连接中断，请重新划词。';
+      }
     });
     my.postMessage({
       mode: 'sentence', selection: current.sentence, sentence: current.sentence,
@@ -437,7 +469,14 @@ ${THINK_TPL}
     }
     port = myPort;
     myPort.onMessage.addListener((m) => { if (port === myPort) onMessage(m); });
-    myPort.onDisconnect.addListener(() => { if (port === myPort) port = null; });
+    myPort.onDisconnect.addListener(() => {
+      if (port !== myPort) return;
+      port = null;
+      // 没收到 done / error 就断了：给出提示，而不是一直停在加载中
+      if (current && popEl && !current.done && !current.failed) {
+        showError({ message: '连接中断（Gloss 可能刚刚更新或重启），请重新划词。' });
+      }
+    });
     myPort.postMessage({
       mode: p.mode, selection: p.selection, sentence: p.sentence,
       paragraph: p.paragraph, title: p.title,
@@ -448,6 +487,10 @@ ${THINK_TPL}
     if (!current || !popEl) return;
     if (m.type === 'fallback') {
       setStatus(`${m.from} 限流，改用 ${m.to}…`);
+      // 可能是输出到一半才报限流：清掉前一家的半截内容，由后备从头写
+      current.buffer = '';
+      current.reason = '';
+      q('.g-think-text').textContent = '';
       q('.g-status').classList.add('warn');
     } else if (m.type === 'thinking') {
       if (!q('.g-status').classList.contains('warn')) setStatus('思考中…');
@@ -474,6 +517,11 @@ ${THINK_TPL}
     } else if (m.type === 'done') {
       current.done = true;
       render(true);
+      if (m.truncated) {
+        setStatus(m.finish === 'length' ? '输出被截断 · 未缓存' : '未正常结束 · 未缓存');
+        q('.g-status').classList.add('warn');
+        return;
+      }
       const name = m.alias || [m.provider, (m.model || '').split('/').pop()].filter(Boolean).join(' · ');
       const lv = { low: '思考·低', medium: '思考·中', high: '思考·高' }[m.level];
       const label = m.cached
@@ -501,6 +549,7 @@ ${THINK_TPL}
       }
       if (current.mode === 'word' && settings.autoCambridge) openCambridge(false);
     } else if (m.type === 'error') {
+      current.failed = true;
       showError(m);
     }
   }
@@ -697,6 +746,7 @@ ${THINK_TPL}
   document.addEventListener('mousedown', () => { shiftClean = false; }, true);
 
   document.addEventListener('keydown', (e) => {
+    if (!e.isTrusted) return;
     if (e.key === 'Shift') {
       if (!e.repeat) { shiftAt = Date.now(); shiftClean = true; }
     } else {
@@ -705,7 +755,7 @@ ${THINK_TPL}
   }, true);
 
   document.addEventListener('keyup', (e) => {
-    if (e.key !== 'Shift' || !shiftClean) return;
+    if (!e.isTrusted || e.key !== 'Shift' || !shiftClean) return;
     shiftClean = false;
     if (Date.now() - shiftAt > 500) return; // 按住太久不算“单按”
     if (!settings.enabled) return;
@@ -817,6 +867,8 @@ ${THINK_TPL}
       if (m.type === 'fallback') {
         wrap.classList.add('fb');
         meta.textContent = `${m.from} 限流，改用 ${m.to}…`;
+        t.textContent = '';
+        think.textContent = '';
       } else if (m.type === 'thinking') t.dataset.thinking = '1';
       else if (m.type === 'reason') {
         think.textContent += m.text;
@@ -825,6 +877,7 @@ ${THINK_TPL}
         if (!t.textContent) think.hidden = true; // 开始输出译文：思考过程自动收起
         if (m.replace) t.textContent = m.text; else t.textContent += m.text;
       } else if (m.type === 'done') {
+        node._ended = true;
         t.textContent = t.textContent.trim();
         if (think.textContent) { wrap.classList.add('has-think'); wrap.title = '点击查看思考过程'; }
         const short = (m.model || '').split('/').pop();
@@ -832,7 +885,10 @@ ${THINK_TPL}
         const label = m.cached
           ? `来自缓存 · ${m.alias || short}${m.viaFallback ? '（后备）' : ''}`
           : (m.alias ? [m.alias, lv] : [m.provider, short, lv]).filter(Boolean).join(' · ');
-        if (m.fallbackFrom) {
+        if (m.truncated) {
+          wrap.classList.add('fb');
+          meta.textContent = m.finish === 'length' ? '输出被截断 · 未缓存' : '未正常结束 · 未缓存';
+        } else if (m.fallbackFrom) {
           meta.textContent = `${m.fallbackFrom} 限流 → 已改用 ${m.alias || m.provider}`;
           setTimeout(() => { meta.textContent = label; wrap.classList.remove('fb'); }, 3000);
         } else {
@@ -840,7 +896,14 @@ ${THINK_TPL}
         }
         try { p.disconnect(); } catch {}
       }
-      else if (m.type === 'error') { t.className = 'err'; t.textContent = m.message || '出错了。'; think.hidden = true; }
+      else if (m.type === 'error') { node._ended = true; t.className = 'err'; t.textContent = m.message || '出错了。'; think.hidden = true; }
+    });
+    p.onDisconnect.addListener(() => {
+      if (node._ended || node._port !== p || !node.isConnected) return;
+      node._ended = true;
+      t.className = 'err';
+      t.textContent = (t.textContent ? t.textContent + '\n' : '') + '连接中断，请对着段落再按两次 Shift 重试。';
+      think.hidden = true;
     });
     p.postMessage({ mode: 'paragraph', selection: text, prev, title: document.title.slice(0, 200) });
   }
